@@ -6,11 +6,13 @@ project(usb_hid_proxy)
 # Add source files
 target_sources(app PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/main.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/drivers/ch375/src/ch375.c
 )
 
 # Add include dirs
 target_include_directories(app PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/drivers/ch375/include
 )
 
 # Needed for 9-bit UART configuration
