@@ -1,3 +1,5 @@
+![LOGO](https://github.com/user-attachments/assets/4a2d50ef-a84f-43d8-87f0-4d3ea64172d8)
+
 # GhostHIDe - USB HID Proxy
 
 ## Overview
