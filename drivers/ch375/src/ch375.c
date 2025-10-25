@@ -2,10 +2,9 @@
 
 LOG_MODULE_REGISTER(ch375, LOG_LEVEL_DBG);
 
-/**
- * @brief CH375 core functions
- */
-
+/* --------------------------------------------------------------------------
+ * CH375 core functions
+ * -------------------------------------------------------------------------*/
  
 /**
   * @brief Initialize the context
@@ -16,23 +15,23 @@ LOG_MODULE_REGISTER(ch375, LOG_LEVEL_DBG);
   * @param query_int The function that will be called when the device is in interrupt mode.
   * @retval 0 on success, error code otherwise
   */
-int ch375_openContext(struct Ch375_Context_t **ppCtx, ch375_writeCmdFn_t write_cmd,
+int ch375_openContext(struct ch375_Context_t **ppCtx, ch375_writeCmdFn_t write_cmd,
                        ch375_writeDataFn_t write_data, ch375_readDataFn_t read_data,
                        ch375_queryIntFn_t query_int, void *priv) {
-	struct Ch375_Context_t *new_ctx;
+	struct ch375_Context_t *new_ctx;
 
 	if (NULL == ppCtx || NULL == write_cmd || NULL == write_data || NULL == read_data || NULL == query_int) {
 		LOG_ERR("Invlid parameters!");
 		return CH375_PARAM_INVALID;           
 	}
 
-	new_ctx = k_malloc(sizeof(struct Ch375_Context_t));
+	new_ctx = k_malloc(sizeof(struct ch375_Context_t));
 	if (NULL == new_ctx) {
 		LOG_ERR("Failed to allocate memory for context!");
 		return CH375_ERROR;
 	}
 
-	memset(new_ctx, 0x00, sizeof(struct Ch375_Context_t));
+	memset(new_ctx, 0x00, sizeof(struct ch375_Context_t));
 	k_mutex_init(&new_ctx->lock);
 
 	new_ctx->priv = priv;
@@ -51,7 +50,7 @@ int ch375_openContext(struct Ch375_Context_t **ppCtx, ch375_writeCmdFn_t write_c
   * @param pCtx The context to close
   * @retval 0 on success, -2 otherwise
   */
-int ch375_closeContext(struct Ch375_Context_t *pCtx) {
+int ch375_closeContext(struct ch375_Context_t *pCtx) {
 	
 	if (NULL == pCtx) {
 		LOG_ERR("Invalid context!");
@@ -67,7 +66,7 @@ int ch375_closeContext(struct Ch375_Context_t *pCtx) {
   * @param pCtx The context to get the private data from
   * @retval None
   */
-void *ch375_getPriv(struct Ch375_Context_t *pCtx) {
+void *ch375_getPriv(struct ch375_Context_t *pCtx) {
 
 	if (NULL == pCtx) {
 		return NULL;
@@ -76,16 +75,16 @@ void *ch375_getPriv(struct Ch375_Context_t *pCtx) {
 	return pCtx->priv;
 }
 
-/**
- * @brief Transfer commands
- */
+/* --------------------------------------------------------------------------
+ * Transfer commands
+ * -------------------------------------------------------------------------*/
 
 /**
   * @brief Checks if a device exists
   * @param pCtx The context to check
   * @retval 0 on success, error code otherwise
   */
-int ch375_checkExist(struct Ch375_Context_t *pCtx) {
+int ch375_checkExist(struct ch375_Context_t *pCtx) {
 
 	if (NULL == pCtx) {
 		LOG_ERR("Invalid context!");
@@ -131,7 +130,7 @@ int ch375_checkExist(struct Ch375_Context_t *pCtx) {
   * @param pVersion pointer to buffer for version
   * @retval 0 on success, error code otherwise
   */
-int ch375_getVersion(struct Ch375_Context_t *pCtx, uint8_t *pVersion) {
+int ch375_getVersion(struct ch375_Context_t *pCtx, uint8_t *pVersion) {
 	
 	if (NULL == pCtx || NULL == pVersion) {
 		LOG_ERR("Invalid parameters!");
@@ -168,7 +167,7 @@ int ch375_getVersion(struct Ch375_Context_t *pCtx, uint8_t *pVersion) {
   * @param baudrate Desired baud rate
   * @retval 0 on success, error code otherwise
   */
-int ch375_setBaudrate(struct Ch375_Context_t *pCtx, uint32_t baudrate) {
+int ch375_setBaudrate(struct ch375_Context_t *pCtx, uint32_t baudrate) {
 
 	if ( NULL == pCtx ) {
 		LOG_ERR("Invalid context!");
@@ -275,7 +274,7 @@ int ch375_setBaudrate(struct Ch375_Context_t *pCtx, uint32_t baudrate) {
   * @param mode The USB mode to set
   * @retval 0 on success, error code otherwise
   */
-int ch375_setUSBMode(struct Ch375_Context_t *pCtx, uint8_t mode) {
+int ch375_setUSBMode(struct ch375_Context_t *pCtx, uint8_t mode) {
 
 	if ( NULL == pCtx ) {
 		LOG_ERR("Invalid context!");
@@ -321,7 +320,7 @@ int ch375_setUSBMode(struct Ch375_Context_t *pCtx, uint8_t mode) {
   * @param pStatus pointer to the interrupt status buffer
   * @retval 0 on success, error code otherwise
   */
-int ch375_getStatus(struct Ch375_Context_t *pCtx, uint8_t *pStatus) {
+int ch375_getStatus(struct ch375_Context_t *pCtx, uint8_t *pStatus) {
 
 	if (NULL == pCtx || NULL == pStatus) {
 		LOG_ERR("Invalid parameters!");
@@ -356,7 +355,7 @@ int ch375_getStatus(struct Ch375_Context_t *pCtx, uint8_t *pStatus) {
   * @param pCtx The context
   * @retval 0 on success, error code otherwise
   */
-int ch375_abortNAK(struct Ch375_Context_t *pCtx) {
+int ch375_abortNAK(struct ch375_Context_t *pCtx) {
 
 	if ( NULL == pCtx ) {
 		LOG_ERR("Invalid context!");
@@ -379,7 +378,7 @@ int ch375_abortNAK(struct Ch375_Context_t *pCtx) {
   * @param pCtx The context
   * @retval query result (1 if INT is asserted, 0 if not asserted)
   */
-int ch375_queryInt(struct Ch375_Context_t *pCtx) {
+int ch375_queryInt(struct ch375_Context_t *pCtx) {
 	
 	if ( NULL == pCtx ) {
 		LOG_ERR("Invalid context!");
@@ -395,7 +394,7 @@ int ch375_queryInt(struct Ch375_Context_t *pCtx) {
   * @param timeout_ms Timeout in ms
   * @retval 0 on success, timeout error otherwise
   */
-int ch375_waitInt(struct Ch375_Context_t *pCtx, uint32_t timeout_ms) {
+int ch375_waitInt(struct ch375_Context_t *pCtx, uint32_t timeout_ms) {
 
 	if ( NULL == pCtx ) {
 		LOG_ERR("Invalid context!");
@@ -414,9 +413,9 @@ int ch375_waitInt(struct Ch375_Context_t *pCtx, uint32_t timeout_ms) {
 	return CH375_TIMEOUT;
 }
 
-/**
- * @brief Host commands
- */
+/* --------------------------------------------------------------------------
+ * Host commands
+ * -------------------------------------------------------------------------*/
 
 /**
   * @brief Query the connection status of the current USB device
@@ -424,7 +423,7 @@ int ch375_waitInt(struct Ch375_Context_t *pCtx, uint32_t timeout_ms) {
   * @param pConnStatus The connection status
   * @retval 0 on success, error code otherwise
   */
-int ch375_testConnect(struct Ch375_Context_t *pCtx, uint8_t *pConnStatus) {
+int ch375_testConnect(struct ch375_Context_t *pCtx, uint8_t *pConnStatus) {
 
 	if (NULL == pCtx || NULL == pConnStatus) {
 		LOG_ERR("Invalid parameters!");
@@ -470,7 +469,7 @@ int ch375_testConnect(struct Ch375_Context_t *pCtx, uint8_t *pConnStatus) {
   * @param pSpeed The device operation speed
   * @retval 0 on success, error code otherwise
   */
-int ch375_getDevSpeed(struct Ch375_Context_t *pCtx, uint8_t *pSpeed) {
+int ch375_getDevSpeed(struct ch375_Context_t *pCtx, uint8_t *pSpeed) {
 	
 	if (NULL == pCtx || NULL == pSpeed) {
 		LOG_ERR("Invalid parameters!");
@@ -513,7 +512,7 @@ int ch375_getDevSpeed(struct Ch375_Context_t *pCtx, uint8_t *pSpeed) {
   * @param speed The device speed
   * @retval 0 on success, error code otherwise
   */
-int ch375_setDevSpeed(struct Ch375_Context_t *pCtx, uint8_t speed) {
+int ch375_setDevSpeed(struct ch375_Context_t *pCtx, uint8_t speed) {
 	
 	if (NULL == pCtx) {
 		LOG_ERR("Invalid context!");
@@ -554,7 +553,7 @@ int ch375_setDevSpeed(struct Ch375_Context_t *pCtx, uint8_t speed) {
   * @param addr The device address
   * @retval 0 on success, error code otherwise
   */
-int ch375_setUSBAddr(struct Ch375_Context_t *pCtx, uint8_t addr) {
+int ch375_setUSBAddr(struct ch375_Context_t *pCtx, uint8_t addr) {
 
 	if (NULL == pCtx) {
 		LOG_ERR("Invalid context!");
@@ -587,7 +586,7 @@ int ch375_setUSBAddr(struct Ch375_Context_t *pCtx, uint8_t addr) {
   * @param addr The device address
   * @retval 0 on success, error code otherwise
   */
-int ch375_setRetry(struct Ch375_Context_t *pCtx, uint8_t times) {
+int ch375_setRetry(struct ch375_Context_t *pCtx, uint8_t times) {
 
 	if (NULL == pCtx) {
 		LOG_ERR("Invalid context!");
@@ -642,7 +641,7 @@ int ch375_setRetry(struct Ch375_Context_t *pCtx, uint8_t times) {
   * @param pStatus The pointer to the variable that will store the status
   * @retval 0 on success, error code otherwise
   */
-int ch375_sendToken(struct Ch375_Context_t *pCtx, uint8_t ep, uint8_t tog,
+int ch375_sendToken(struct ch375_Context_t *pCtx, uint8_t ep, uint8_t tog,
                     uint8_t pid, uint8_t *pStatus) {
 	
 	if (NULL == pCtx) {
@@ -708,9 +707,9 @@ int ch375_sendToken(struct Ch375_Context_t *pCtx, uint8_t ep, uint8_t tog,
 	return CH375_SUCCESS;
 }
 
-/**
- * @brief Data transfer commands
- */
+/* --------------------------------------------------------------------------
+ * Data transfer commands
+ * -------------------------------------------------------------------------*/
 
 /**
   * @brief Writes a command to the device
@@ -718,7 +717,7 @@ int ch375_sendToken(struct Ch375_Context_t *pCtx, uint8_t ep, uint8_t tog,
   * @param cmd The command to write
   * @retval The result of the write
   */
-int ch375_writeCmd(struct Ch375_Context_t *pCtx, uint8_t cmd) {
+int ch375_writeCmd(struct ch375_Context_t *pCtx, uint8_t cmd) {
 	
 	if (NULL == pCtx) {
 		LOG_ERR("Invalid context!");
@@ -734,7 +733,7 @@ int ch375_writeCmd(struct Ch375_Context_t *pCtx, uint8_t cmd) {
   * @param data The data to write
   * @retval The result of the write
   */
-int ch375_writeData(struct Ch375_Context_t *pCtx, uint8_t data) {
+int ch375_writeData(struct ch375_Context_t *pCtx, uint8_t data) {
 
 	if (NULL == pCtx) {
 		LOG_ERR("Invalid context!");
@@ -750,7 +749,7 @@ int ch375_writeData(struct Ch375_Context_t *pCtx, uint8_t data) {
   * @param pData Pointer to 1 byte buffer to store data in 
   * @retval The result of the write
   */
-int ch375_readData(struct Ch375_Context_t *pCtx, uint8_t *pData) {
+int ch375_readData(struct ch375_Context_t *pCtx, uint8_t *pData) {
 	
 	if (NULL == pCtx || NULL == pData) {
 		LOG_ERR("Invalid parameters!");

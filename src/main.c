@@ -9,7 +9,7 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
 int main(void)
 {
-    int ret;
+    int ret = -1;
 
     static const struct gpio_dt_spec ch375a_int = {
         .port = DEVICE_DT_GET(DT_NODELABEL(gpioc)),
@@ -23,7 +23,15 @@ int main(void)
         .dt_flags = GPIO_ACTIVE_LOW
     };
 
+    LOG_INF("=================================");
+    LOG_INF("Starting GhostHIDe...");
+    LOG_INF("=================================");
+
     const struct device *gpioc = DEVICE_DT_GET(DT_NODELABEL(gpioc));
+    if (true != device_is_ready(gpioc)) {
+        LOG_ERR("GPIO C not ready!");
+        return -1;
+    }
 
     while (1) {
 

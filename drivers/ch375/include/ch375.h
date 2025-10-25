@@ -39,7 +39,7 @@ typedef enum {
     /* State codes*/
     CH375_CMD_RET_SUCCESS       =   0x51,
     CH375_CMD_RET_FAILED        =   0x5F
-} Ch375_CMD_e;
+} ch375_CMD_e;
 
 /**
  * @brief CH375 USB host modes
@@ -49,7 +49,7 @@ typedef enum {
     CH375_USB_MODE_NO_SOF       =   0x05,
     CH375_USB_MODE_SOF_AUTO     =   0x06,
     CH375_USB_MODE_RESET        =   0x07
-} Ch375_USBHostMode_e;
+} ch375_USBHostMode_e;
 
 /**
  * @brief CH375 USB host interrupt states
@@ -60,7 +60,7 @@ typedef enum {
     CH375_USB_INT_DISCONNECT    =   0x16,
     CH375_USB_INT_BUF_OVER      =   0x17,
     CH375_USB_INT_USB_READY     =   0x18
-} Ch375_USBHostInt_e;
+} ch375_USBHostInt_e;
 
 /* Macros for command/data differentiation in 9-bit mode */
 #define CH375_CMD(x)  ((uint16_t)((x) | 0x0100))
@@ -79,7 +79,7 @@ typedef enum {
     CH375_NO_EXIST              =   -5,
     CH375_TIMEOUT               =   -6,
     CH375_NOT_FOUND             =   -7,
-} Ch375_ErrNo;
+} ch375_ErrNo;
 
 /**
  * @brief CH375 retry
@@ -88,25 +88,25 @@ typedef enum {
     CH375_RETRY_TIMES_ZERO      =   0x00,
     CH375_RETRY_TIMES_2MS       =   0x01,
     CH375_RETRY_TIMES_INFINITY  =   0x02
-} Ch375_Retry_e;
+} ch375_Retry_e;
 
 /* Default Baudrates */
 #define CH375_DEFAULT_BAUDRATE  9600
 #define CH375_WORK_BAUDRATE     115200
 
 // Forward declration of CH375 context structure
-struct Ch375_Context_t;
+struct ch375_Context_t;
 
 // Function pointer types for hardware abstraction
-typedef int (*ch375_writeCmdFn_t)(struct Ch375_Context_t *pCtx, uint8_t cmd);
-typedef int (*ch375_writeDataFn_t)(struct Ch375_Context_t *pCtx, uint8_t data);
-typedef int (*ch375_readDataFn_t)(struct Ch375_Context_t *pCtx, uint8_t *data);
-typedef int (*ch375_queryIntFn_t)(struct Ch375_Context_t *pCtx);
+typedef int (*ch375_writeCmdFn_t)(struct ch375_Context_t *pCtx, uint8_t cmd);
+typedef int (*ch375_writeDataFn_t)(struct ch375_Context_t *pCtx, uint8_t data);
+typedef int (*ch375_readDataFn_t)(struct ch375_Context_t *pCtx, uint8_t *data);
+typedef int (*ch375_queryIntFn_t)(struct ch375_Context_t *pCtx);
 
 /**
  * @brief CH375 Context structure
  */
-struct Ch375_Context_t {
+struct ch375_Context_t {
     void *priv;
     ch375_writeCmdFn_t write_cmd;
     ch375_writeDataFn_t write_data;
@@ -118,43 +118,43 @@ struct Ch375_Context_t {
 /**
  * @brief CH375 core functions
  */
-int ch375_openContext(struct Ch375_Context_t **ppCtx,
+int ch375_openContext(struct ch375_Context_t **ppCtx,
                        ch375_writeCmdFn_t write_cmd,
                        ch375_writeDataFn_t write_data,
                        ch375_readDataFn_t read_data,
                        ch375_queryIntFn_t query_int,
                        void *priv);
-int ch375_closeContext(struct Ch375_Context_t *pCtx);
-void *ch375_getPriv(struct Ch375_Context_t *pCtx);
+int ch375_closeContext(struct ch375_Context_t *pCtx);
+void *ch375_getPriv(struct ch375_Context_t *pCtx);
 
 /**
  * @brief Transfer commands
  */
-int ch375_checkExist(struct Ch375_Context_t *pCtx);
-int ch375_getVersion(struct Ch375_Context_t *pCtx, uint8_t *pVersion);
-int ch375_setBaudrate(struct Ch375_Context_t *pCtx, uint32_t baudrate);
-int ch375_setUSBMode(struct Ch375_Context_t *pCtx, uint8_t mode);
-int ch375_getStatus(struct Ch375_Context_t *pCtx, uint8_t *pStatus);
-int ch375_abortNAK(struct Ch375_Context_t *pCtx);
-int ch375_queryInt(struct Ch375_Context_t *pCtx);
-int ch375_waitInt(struct Ch375_Context_t *pCtx, uint32_t timeout_ms);
+int ch375_checkExist(struct ch375_Context_t *pCtx);
+int ch375_getVersion(struct ch375_Context_t *pCtx, uint8_t *pVersion);
+int ch375_setBaudrate(struct ch375_Context_t *pCtx, uint32_t baudrate);
+int ch375_setUSBMode(struct ch375_Context_t *pCtx, uint8_t mode);
+int ch375_getStatus(struct ch375_Context_t *pCtx, uint8_t *pStatus);
+int ch375_abortNAK(struct ch375_Context_t *pCtx);
+int ch375_queryInt(struct ch375_Context_t *pCtx);
+int ch375_waitInt(struct ch375_Context_t *pCtx, uint32_t timeout_ms);
 
 /**
  * @brief Host commands
  */
-int ch375_testConnect(struct Ch375_Context_t *pCtx, uint8_t *pConnStatus);
-int ch375_getDevSpeed(struct Ch375_Context_t *pCtx, uint8_t *pSpeed);
-int ch375_setDevSpeed(struct Ch375_Context_t *pCtx, uint8_t speed);
-int ch375_setUSBAddr(struct Ch375_Context_t *pCtx, uint8_t addr);
-int ch375_setRetry(struct Ch375_Context_t *pCtx, uint8_t times);
-int ch375_sendToken(struct Ch375_Context_t *pCtx, uint8_t ep, uint8_t tog,
+int ch375_testConnect(struct ch375_Context_t *pCtx, uint8_t *pConnStatus);
+int ch375_getDevSpeed(struct ch375_Context_t *pCtx, uint8_t *pSpeed);
+int ch375_setDevSpeed(struct ch375_Context_t *pCtx, uint8_t speed);
+int ch375_setUSBAddr(struct ch375_Context_t *pCtx, uint8_t addr);
+int ch375_setRetry(struct ch375_Context_t *pCtx, uint8_t times);
+int ch375_sendToken(struct ch375_Context_t *pCtx, uint8_t ep, uint8_t tog,
                     uint8_t pid, uint8_t *pStatus);
 
 /**
  * @brief Data transfer commands
  */
-int ch375_writeCmd(struct Ch375_Context_t *pCtx, uint8_t cmd);
-int ch375_writeData(struct Ch375_Context_t *pCtx, uint8_t data);
-int ch375_readData(struct Ch375_Context_t *pCtx, uint8_t *pData);
+int ch375_writeCmd(struct ch375_Context_t *pCtx, uint8_t cmd);
+int ch375_writeData(struct ch375_Context_t *pCtx, uint8_t data);
+int ch375_readData(struct ch375_Context_t *pCtx, uint8_t *pData);
 
 #endif /* CH375_H */
