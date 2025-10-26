@@ -41,9 +41,9 @@ typedef struct {
  */
 
 int ch375_hwInitManual(const char *name, int usart_index, const struct gpio_dt_spec *int_gpio,
-                         uint32_t initial_baudrate, struct ch375_Context_t **ctx_out);
+                         uint32_t initial_baudrate, struct ch375_Context_t **ppCtxOut);
 
-int ch375_hwSetBaudrate(struct ch375_Context_t *ctx, uint32_t baudrate);
+int ch375_hwSetBaudrate(struct ch375_Context_t *pCtx, uint32_t baudrate);
 
 #ifdef __cplusplus
 }

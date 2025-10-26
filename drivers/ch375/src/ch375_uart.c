@@ -11,10 +11,10 @@ static USART_TypeDef *get_uart_instance_from_index(int usart_index);
 static int ch375_configure_9bit_instance(USART_TypeDef *huart, uint32_t baudrate);
 static int ch375_instance_write_u16_timeout(USART_TypeDef *huart, uint16_t data, k_timeout_t timeout);
 static int ch375_instance_read_u16_timeout(USART_TypeDef *huart, uint16_t *data, k_timeout_t timeout);
-static int ch375_write_cmd_cb(struct ch375_Context_t *ctx, uint8_t cmd);
-static int ch375_write_data_cb(struct ch375_Context_t *ctx, uint8_t data);
-static int ch375_read_data_cb(struct ch375_Context_t *ctx, uint8_t *data);
-static int ch375_query_int_cb(struct ch375_Context_t *ctx);
+static int ch375_write_cmd_cb(struct ch375_Context_t *pCtx, uint8_t cmd);
+static int ch375_write_data_cb(struct ch375_Context_t *pCtx, uint8_t data);
+static int ch375_read_data_cb(struct ch375_Context_t *pCtx, uint8_t *pData);
+static int ch375_query_int_cb(struct ch375_Context_t *pCtx);
 
 /**
  * @brief CH375 UART harware functions
@@ -26,14 +26,14 @@ static int ch375_query_int_cb(struct ch375_Context_t *ctx);
   * @param usart_index the index of the USART peripheral
   * @param int_gpio the GPIO pin to use as interrupt
   * @param initial_baudrate the initial baud rate value
-  * @param ctx_out the context to initialize
+  * @param ppCtxOut the context to initialize
   * @retval 0 on success, error code otherwise
   */
 int ch375_hwInitManual(const char *name, int usart_index, const struct gpio_dt_spec *int_gpio, 
-                                uint32_t initial_baudrate, struct ch375_Context_t **ctx_out) {
+                                uint32_t initial_baudrate, struct ch375_Context_t **ppCtxOut) {
     
     ch375_HwContext_t *hw = NULL;
-    struct ch375_Context_t *ctx = NULL;
+    struct ch375_Context_t *pCtx = NULL;
     USART_TypeDef *huart = NULL;
     int ret = -1;
 
@@ -136,7 +136,7 @@ int ch375_hwInitManual(const char *name, int usart_index, const struct gpio_dt_s
     }
 
     // Open CH375 context (callback will use hw->huart via instance functions)
-    ret = ch375_openContext(&ctx, ch375_write_cmd_cb, ch375_write_data_cb, 
+    ret = ch375_openContext(&pCtx, ch375_write_cmd_cb, ch375_write_data_cb, 
                                 ch375_read_data_cb, ch375_query_int_cb, hw);
 
      if (CH375_SUCCESS != ret) {
@@ -145,7 +145,7 @@ int ch375_hwInitManual(const char *name, int usart_index, const struct gpio_dt_s
         return -EIO;
     }
 
-    *ctx_out = ctx;
+    *ppCtxOut = pCtx;
     LOG_INF("%s: Manual hardware initialized (USART%d)", name, usart_index);
 
     return 0;
@@ -158,9 +158,9 @@ int ch375_hwInitManual(const char *name, int usart_index, const struct gpio_dt_s
   * @param baudrate Baud rate
   * @retval 0 on success, error code otherwise
   */
-int ch375_hwSetBaudrate(struct ch375_Context_t *ctx, uint32_t baudrate) {
+int ch375_hwSetBaudrate(struct ch375_Context_t *pCtx, uint32_t baudrate) {
     
-    ch375_HwContext_t *hw = (ch375_HwContext_t *)ch375_getPriv(ctx);
+    ch375_HwContext_t *hw = (ch375_HwContext_t *)ch375_getPriv(pCtx);
 
     if (NULL == hw || NULL == hw->huart) {
         return -ENOTSUP;
@@ -581,9 +581,9 @@ static int ch375_instance_read_u16_timeout(USART_TypeDef *huart, uint16_t *data,
 /* --------------------------------------------------------------------------
  * CH375 Callback functions
  * -------------------------------------------------------------------------*/
-static int ch375_write_cmd_cb(struct ch375_Context_t *ctx, uint8_t cmd) {
+static int ch375_write_cmd_cb(struct ch375_Context_t *pCtx, uint8_t cmd) {
 
-    ch375_HwContext_t *hw = (ch375_HwContext_t *)ch375_getPriv(ctx);
+    ch375_HwContext_t *hw = (ch375_HwContext_t *)ch375_getPriv(pCtx);
     uint16_t data = CH375_CMD(cmd);
     int ret = -1;
 
@@ -601,9 +601,9 @@ static int ch375_write_cmd_cb(struct ch375_Context_t *ctx, uint8_t cmd) {
     return CH375_SUCCESS;
 }
 
-static int ch375_write_data_cb(struct ch375_Context_t *ctx, uint8_t data)
+static int ch375_write_data_cb(struct ch375_Context_t *pCtx, uint8_t data)
 {
-    ch375_HwContext_t *hw = (ch375_HwContext_t *)ch375_getPriv(ctx);
+    ch375_HwContext_t *hw = (ch375_HwContext_t *)ch375_getPriv(pCtx);
     uint16_t val = CH375_DATA(data);
     int ret = -1;
 
@@ -621,9 +621,9 @@ static int ch375_write_data_cb(struct ch375_Context_t *ctx, uint8_t data)
     return CH375_SUCCESS;
 }
 
-static int ch375_read_data_cb(struct ch375_Context_t *ctx, uint8_t *data)
+static int ch375_read_data_cb(struct ch375_Context_t *pCtx, uint8_t *pData)
 {
-    ch375_HwContext_t *hw = (ch375_HwContext_t *)ch375_getPriv(ctx);
+    ch375_HwContext_t *hw = (ch375_HwContext_t *)ch375_getPriv(pCtx);
     uint16_t val;
     int ret = -1;
 
@@ -641,13 +641,13 @@ static int ch375_read_data_cb(struct ch375_Context_t *ctx, uint8_t *data)
         return CH375_ERROR;
     }
 
-    *data = (uint8_t)(val & 0xFF);
+    *pData = (uint8_t)(val & 0xFF);
     return CH375_SUCCESS;
 }
 
-static int ch375_query_int_cb(struct ch375_Context_t *ctx)
+static int ch375_query_int_cb(struct ch375_Context_t *pCtx)
 {
-    ch375_HwContext_t *hw = (ch375_HwContext_t *)ch375_getPriv(ctx);
+    ch375_HwContext_t *hw = (ch375_HwContext_t *)ch375_getPriv(pCtx);
 
     if (NULL == hw) {
         return 0;
