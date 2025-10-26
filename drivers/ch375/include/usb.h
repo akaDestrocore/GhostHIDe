@@ -5,9 +5,6 @@
 extern "C" {
 #endif
 
-#include <zephyr/usb/usb_ch9.h>
-#include <stdint.h>
-
 typedef enum {
     USB_PID_NULL   = 0x00,
     USB_PID_SOF    = 0x05,
