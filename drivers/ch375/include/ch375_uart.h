@@ -1,6 +1,10 @@
 #ifndef CH375_UART_H
 #define CH375_UART_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
@@ -40,5 +44,9 @@ int ch375_hwInitManual(const char *name, int usart_index, const struct gpio_dt_s
                          uint32_t initial_baudrate, struct ch375_Context_t **ctx_out);
 
 int ch375_hwSetBaudrate(struct ch375_Context_t *ctx, uint32_t baudrate);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* CH375_UART_H */

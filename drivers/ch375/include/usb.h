@@ -1,6 +1,10 @@
 #ifndef _USB_PID_H
 #define _USB_PID_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <zephyr/usb/usb_ch9.h>
 #include <stdint.h>
 
@@ -17,5 +21,9 @@ typedef enum {
     USB_PID_DATA1  = 0x0B,
     USB_PID_PRE    = 0x0C
 } USB_PID_e;
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* _USB_PID_H */

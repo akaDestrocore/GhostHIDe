@@ -1,6 +1,10 @@
 #ifndef CH375_H
 #define CH375_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/usb/uhc.h>
 #include <zephyr/logging/log.h>
@@ -156,5 +160,9 @@ int ch375_sendToken(struct ch375_Context_t *pCtx, uint8_t ep, uint8_t tog,
 int ch375_writeCmd(struct ch375_Context_t *pCtx, uint8_t cmd);
 int ch375_writeData(struct ch375_Context_t *pCtx, uint8_t data);
 int ch375_readData(struct ch375_Context_t *pCtx, uint8_t *pData);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* CH375_H */
