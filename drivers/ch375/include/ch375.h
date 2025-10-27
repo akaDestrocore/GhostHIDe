@@ -10,6 +10,7 @@ extern "C" {
 #include <zephyr/logging/log.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include "usb.h"
 
 #define WAIT_INT_TIMEOUT_MS 2000
@@ -151,7 +152,7 @@ int ch375_getDevSpeed(struct ch375_Context_t *pCtx, uint8_t *pSpeed);
 int ch375_setDevSpeed(struct ch375_Context_t *pCtx, uint8_t speed);
 int ch375_setUSBAddr(struct ch375_Context_t *pCtx, uint8_t addr);
 int ch375_setRetry(struct ch375_Context_t *pCtx, uint8_t times);
-int ch375_sendToken(struct ch375_Context_t *pCtx, uint8_t ep, uint8_t tog,
+int ch375_sendToken(struct ch375_Context_t *pCtx, uint8_t ep, bool tog,
                     uint8_t pid, uint8_t *pStatus);
 
 /**
@@ -160,6 +161,9 @@ int ch375_sendToken(struct ch375_Context_t *pCtx, uint8_t ep, uint8_t tog,
 int ch375_writeCmd(struct ch375_Context_t *pCtx, uint8_t cmd);
 int ch375_writeData(struct ch375_Context_t *pCtx, uint8_t data);
 int ch375_readData(struct ch375_Context_t *pCtx, uint8_t *pData);
+int ch375_writeBlockData(struct ch375_Context_t *pCtx, uint8_t *pBuff, uint8_t len);
+int ch375_readBlockData(struct ch375_Context_t *pCtx, uint8_t *pBuff, 
+                                                uint8_t len, uint8_t *pActualLen);
 
 #ifdef __cplusplus
 }

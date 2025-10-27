@@ -641,7 +641,7 @@ int ch375_setRetry(struct ch375_Context_t *pCtx, uint8_t times) {
   * @param pStatus The pointer to the variable that will store the status
   * @retval 0 on success, error code otherwise
   */
-int ch375_sendToken(struct ch375_Context_t *pCtx, uint8_t ep, uint8_t tog,
+int ch375_sendToken(struct ch375_Context_t *pCtx, uint8_t ep, bool tog,
                     uint8_t pid, uint8_t *pStatus) {
 	
 	if (NULL == pCtx) {
@@ -747,7 +747,7 @@ int ch375_writeData(struct ch375_Context_t *pCtx, uint8_t data) {
   * @brief Read data from the device
   * @param pCtx The context
   * @param pData Pointer to 1 byte buffer to store data in 
-  * @retval The result of the write
+  * @retval The result of the read operation
   */
 int ch375_readData(struct ch375_Context_t *pCtx, uint8_t *pData) {
 	
@@ -757,4 +757,115 @@ int ch375_readData(struct ch375_Context_t *pCtx, uint8_t *pData) {
 	}
 
 	return pCtx->read_data(pCtx, pData);
+}
+
+/**
+  * @brief Write a block of data to the device
+  * @param pCtx The context
+  * @param pBuff Pointer to buffer to store data
+  * @param len Length of the buffer
+  * @retval The result of the write
+  */
+int ch375_writeBlockData(struct ch375_Context_t *pCtx, uint8_t *pBuff, uint8_t len) {
+	int ret = -1;
+	uint8_t offset;
+
+	if(NULL == pCtx) {
+		return CH375_PARAM_INVALID;
+	}
+
+	if (NULL == pBuff && 0 != len) {
+		return CH375_PARAM_INVALID;
+	}
+
+	k_mutex_lock(&pCtx->lock, K_FOREVER);
+	
+	ret = ch375_writeCmd(pCtx, CH375_CMD_WR_USB_DATA7);
+    if (CH375_SUCCESS != ret) {
+        k_mutex_unlock(&pCtx->lock);
+        return CH375_WRITE_CMD_FAILED;
+    }
+
+	ret = ch375_writeData(pCtx, len);
+    if (CH375_SUCCESS != ret) {
+        k_mutex_unlock(&pCtx->lock);
+        return CH375_WRITE_CMD_FAILED;
+    }
+
+	offset = 0;
+	while (len > 0) {
+		ret = ch375_writeData(pCtx, pBuff[offset]);
+		if (CH375_SUCCESS != ret) {
+            k_mutex_unlock(&pCtx->lock);
+            return CH375_WRITE_CMD_FAILED;
+        }
+        offset++;
+        len--;
+	}
+
+	k_mutex_unlock(&pCtx->lock);
+    return CH375_SUCCESS;
+}
+
+/**
+  * @brief The function to read from the CH375
+  * @param pCtx The context
+  * @param pBuff The buffer to read from
+  * @param len The length of the data to read
+  * @param pActualLen The actual number of bytes read
+  * @retval The result of the read block operation
+  */
+int ch375_readBlockData(struct ch375_Context_t *pCtx, uint8_t *pBuff, uint8_t len, uint8_t *pActualLen) {
+    
+	int ret = -1;
+    uint8_t dataLen;
+    uint8_t resiLen;
+    uint8_t offset;
+    
+    if (NULL == pCtx || NULL == pBuff || NULL == pActualLen) {
+        LOG_ERR("Invalid parameters");
+        return CH375_PARAM_INVALID;
+    }
+    
+    k_mutex_lock(&pCtx->lock, K_FOREVER);
+    
+    ret = ch375_writeCmd(pCtx, CH375_CMD_RD_USB_DATA);
+    if (CH375_SUCCESS != ret) {
+        k_mutex_unlock(&pCtx->lock);
+        return CH375_WRITE_CMD_FAILED;
+    }
+    
+    // First byte is the len
+    ret = ch375_readData(pCtx, &dataLen);
+    if (CH375_SUCCESS != ret) {
+        k_mutex_unlock(&pCtx->lock);
+        return CH375_READ_DATA_FAILED;
+    }
+    
+    resiLen = dataLen;
+    offset = 0;
+    
+    // Extra handle CH375 reporting more bytes than there actually is
+    while (resiLen > 0 && offset < len) {
+        ret = ch375_readData(pCtx, &pBuff[offset]);
+        
+        if (CH375_TIMEOUT == ret) {
+            // Short packet
+            break;
+        }
+        
+        if (CH375_SUCCESS != ret) {
+            LOG_ERR("Read failed at offset %d: %d", offset, ret);
+            k_mutex_unlock(&pCtx->lock);
+            return CH375_READ_DATA_FAILED;
+        }
+        
+        offset++;
+        resiLen--;
+    }
+    
+    *pActualLen = offset;
+    
+    k_mutex_unlock(&pCtx->lock);
+    return CH375_SUCCESS;
 }
