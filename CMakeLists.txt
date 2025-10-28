@@ -7,6 +7,8 @@ project(usb_hid_proxy)
 target_sources(app PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/main.c
     ${CMAKE_CURRENT_SOURCE_DIR}/drivers/ch375/src/ch375.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/drivers/ch375/src/ch375_uart.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/drivers/ch375/src/ch375_host.c
 )
 
 # Add include dirs
