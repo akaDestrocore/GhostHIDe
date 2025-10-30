@@ -63,9 +63,9 @@ int ch375_hostWaitDeviceConnect(struct ch375_Context_t *pCtx, uint32_t timeout) 
 
     int ret = -1;
     uint8_t conn_status;
-    uint32_t cnt = 0;
+    uint32_t cnt;
 
-    for (cnt; cnt < timeout; cnt++) {
+    for (cnt = 0; cnt < timeout; cnt++) {
         ret = ch375_testConnect(pCtx, &conn_status);
         if (CH375_SUCCESS != ret) {
             LOG_ERR("Test connect failed: %d", ret);
