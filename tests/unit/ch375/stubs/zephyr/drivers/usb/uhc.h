@@ -1,0 +1,9 @@
+#ifndef ZEPHYR_INCLUDE_DRIVERS_USB_UHC_H_
+#define ZEPHYR_INCLUDE_DRIVERS_USB_UHC_H_
+
+// USB speed definitions
+#define USB_SPEED_UNKNOWN     0x00
+#define USB_SPEED_SPEED_LS    0x01
+#define USB_SPEED_SPEED_FS    0x02
+
+#endif /* ZEPHYR_INCLUDE_DRIVERS_USB_UHC_H_ */

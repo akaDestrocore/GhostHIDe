@@ -1,0 +1,22 @@
+common:
+  tags:
+    - unit
+  platform_allow:
+    - native_sim
+  harness: ztest
+
+tests:
+  unit.ch375.core:
+    extra_configs:
+      - CONFIG_ZTEST=y
+      - CONFIG_LOG_DEFAULT_LEVEL=0
+    
+  unit.ch375.descriptors:
+    extra_configs:
+      - CONFIG_ZTEST=y
+      - CONFIG_LOG_DEFAULT_LEVEL=0
+
+  unit.ch375.transfers:
+    extra_configs:
+      - CONFIG_ZTEST=y
+      - CONFIG_LOG_DEFAULT_LEVEL=0
