@@ -120,9 +120,62 @@ west flash
 screen /dev/ttyUSB0 115200
 ```
 
+## Testing
+
+### Quick Start - Run All Tests
+
+```bash
+# From Zephyr workspace root
+west twister -T /path/to/GhostHIDe/tests/unit/ch375 -p native_sim
+```
+
+### Test Structure
+
+```
+tests/
+└── unit
+    └── ch375
+        ├── CMakeLists.txt
+        ├── mocks
+        │   ├── mock_ch375_hw.c
+        │   ├── mock_ch375_hw.h
+        │   └── usb_stubs.h
+        ├── prj.conf
+        ├── src
+        │   ├── test_ch375_core.c
+        │   ├── test_descriptors.c
+        │   └── test_transfers.c
+        ├── stubs
+        │   └── zephyr
+        │       └── drivers
+        │           └── usb
+        │               └── uhc.h
+        └── testcase.yaml
+```
+
+### Run Specific Test Suite
+
+```bash
+# Core protocol tests only
+west twister -T /path/to/GhostHIDe/tests/unit/ch375 -s unit.ch375.core -p native_sim
+
+# Descriptor parsing tests only
+west twister -T /path/to/GhostHIDe/tests/unit/ch375 -s unit.ch375.descriptors -p native_sim
+
+# Transfer logic tests only
+west twister -T /path/to/GhostHIDe/tests/unit/ch375 -s unit.ch375.transfers -p native_sim
+```
+
+### Run with Verbose Output
+
+```bash
+west twister -T /path/to/GhostHIDe/tests/unit/ch375 -p native_sim -v
+```
+
+
 ## Future Enhancements
 
-- [ ] Adapt CH375 driver for Zephyr usage
+- [x] Adapt CH375 driver for Zephyr usage
 - [ ] Implement HID layer
 - [ ] Handle mouse
 - [ ] Handle keyboard
