@@ -1,6 +1,10 @@
 #ifndef CH375_HOST_H
 #define CH375_HOST_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <zephyr/kernel.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/drivers/usb/uhc.h>
@@ -133,5 +137,9 @@ int ch375_hostBulkTransfer(struct USB_Device_t *pUdev, uint8_t ep, uint8_t *pDat
                                                                         int *pActualLen, uint32_t timeout);
 int ch375_hostClearStall(struct USB_Device_t *pUdev, uint8_t ep);
 int ch375_hostSetConfiguration(struct USB_Device_t *pUdev, uint8_t config);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* CH375_HOST_H */
