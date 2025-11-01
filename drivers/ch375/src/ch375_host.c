@@ -858,7 +858,7 @@ static void parse_interface_descriptor(struct USB_Device_t *pUdev, struct usb_if
 
     interface->interface_number = pDesc->bInterfaceNumber;
     interface->interface_class = pDesc->bInterfaceClass;
-    interface->interface_class = pDesc->bInterfaceSubClass;
+    interface->interface_subclass = pDesc->bInterfaceSubClass;
     interface->interface_protocol = pDesc->bInterfaceProtocol;
 
     pUdev->interface_count++;
