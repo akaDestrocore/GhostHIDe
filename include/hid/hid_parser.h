@@ -1,0 +1,148 @@
+#ifndef HID_PARSER_H
+#define HID_PARSER_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <zephyr/kernel.h>
+#include <zephyr/usb/class/hid.h>
+#include <zephyr/sys/byteorder.h>
+#include <zephyr/logging/log.h>
+#include <stdint.h>
+#include <string.h>
+
+#define HID_ITEM_TAG_LONG 15
+#define USB_CLASS_HID 0x03
+
+#define USBHID_TYPE_MOUSE       1
+#define USBHID_TYPE_KEYBOARD    2
+
+/**
+ * @brief HID Report Item Format
+ */
+typedef enum {
+    HID_ITEM_FORMAT_SHORT,
+    HID_ITEM_FORMAT_LONG
+} HID_ItemFormat_e;
+
+/**
+ * @brief HID Request Codes
+ */
+typedef enum {
+    HID_GET_REPORT      = 0x01,
+    HID_GET_IDLE        = 0x02,
+    HID_GET_PROTOCOL    = 0x03,
+    HID_SET_REPORT      = 0x09,
+    HID_SET_IDLE        = 0x0A,
+    HID_SET_PROTOCOL    = 0x0B    
+} HID_ReqCode_e;
+
+/**
+ * @brief HID Report Types
+ */
+typedef enum {
+    HID_REPORT_TYPE_INPUT   = 0x01,
+    HID_REPORT_TYPE_OUTPUT  = 0x02,
+    HID_REPORT_TYPE_FEATURE = 0x03
+} HID_ReportType_e;
+
+/**
+ * @brief HID Main Item Tags
+ */
+typedef enum {
+    HID_MAIN_ITEM_TAG_INPUT             = 8,
+    HID_MAIN_ITEM_TAG_OUTPUT            = 9,
+    HID_MAIN_ITEM_TAG_FEATURE           = 11,
+    HID_MAIN_ITEM_TAG_BEGIN_COLLECTION  = 10,
+    HID_MAIN_ITEM_TAG_END_COLLECTION    = 12
+} HID_MainItemTag_e;
+
+/**
+ * @brief HID Global Item Tags
+ */
+typedef enum {
+    HID_GLOBAL_ITEM_TAG_USAGE_PAGE       =  0,
+    HID_GLOBAL_ITEM_TAG_LOGICAL_MINIMUM  =  1,
+    HID_GLOBAL_ITEM_TAG_LOGICAL_MAXIMUM  =  2,
+    HID_GLOBAL_ITEM_TAG_PHYSICAL_MINIMUM =  3,
+    HID_GLOBAL_ITEM_TAG_PHYSICAL_MAXIMUM =  4,
+    HID_GLOBAL_ITEM_TAG_UNIT_EXPONENT    =  5,
+    HID_GLOBAL_ITEM_TAG_UNIT             =  6,
+    HID_GLOBAL_ITEM_TAG_REPORT_SIZE      =  7,
+    HID_GLOBAL_ITEM_TAG_REPORT_ID        =  8,
+    HID_GLOBAL_ITEM_TAG_REPORT_COUNT     =  9,
+    HID_GLOBAL_ITEM_TAG_PUSH             =  10,
+    HID_GLOBAL_ITEM_TAG_POP              =  11
+} HID_GlobalItemTag_e;
+
+/**
+ * @brief HID Local Item Tags
+ */
+typedef enum {
+    HID_LOCAL_ITEM_TAG_USAGE            = 0,
+    HID_LOCAL_ITEM_TAG_USAGE_MINIMUM    = 1,
+    HID_LOCAL_ITEM_TAG_USAGE_MAXIMUM    = 2
+} HID_LocalItemTag_e;
+
+/* HID Usage Pages */
+#define HID_USAGE_PAGE          0xffff0000
+#define HID_UP_UNDEFINED        0x00000000
+#define HID_UP_GENDESK          0x00010000
+#define HID_UP_KEYBOARD         0x00070000
+#define HID_UP_LED              0x00080000
+#define HID_UP_BUTTON           0x00090000
+
+/* HID Usage IDs */
+#define HID_USAGE               0x0000ffff
+#define HID_GD_POINTER          0x00010001
+#define HID_GD_MOUSE            0x00010002
+#define HID_GD_KEYBOARD         0x00010006
+#define HID_GD_X                0x00010030
+#define HID_GD_Y                0x00010031
+#define HID_GD_Z                0x00010032
+#define HID_GD_WHEEL            0x00010038
+
+/**
+ * @brief HID Item Structure
+ */
+struct HID_Item_t {
+    uint8_t format;
+    uint8_t size;
+    uint8_t type;
+    uint8_t tag;
+    union {
+        uint8_t u8;
+        int8_t s8;
+        uint16_t u16;
+        int16_t s16;
+        uint32_t u32;
+        int32_t s32;
+        uint8_t *longdata;
+    } data;
+};
+
+/**
+ * @brief HID Data Descriptor
+ */
+struct HID_DataDescriptor_t {
+    int32_t physical_minimum;
+    int32_t physical_maximum;
+    int32_t logical_minimum;
+    int32_t logical_maximum;
+    uint32_t size;
+    uint32_t count;
+    uint32_t report_buf_off;
+};
+
+/**
+ * @brief Function prototypes
+ */
+uint8_t *HID_fetchItem(uint8_t *pStart, uint8_t *pEnd, struct HID_Item_t *pItem);
+int HID_parseReportDescriptor(uint8_t *pReport, uint16_t len, uint8_t *pType);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* HID_PARSER_H */
