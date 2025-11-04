@@ -8,15 +8,61 @@ extern "C" {
 #include <zephyr/kernel.h>
 #include <zephyr/usb/class/hid.h>
 #include <zephyr/sys/byteorder.h>
+#include <zephyr/usb/usb_ch9.h>
 #include <zephyr/logging/log.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
+#include "ch375_host.h"
 
 #define HID_ITEM_TAG_LONG 15
 #define USB_CLASS_HID 0x03
 
-#define USBHID_TYPE_MOUSE       1
-#define USBHID_TYPE_KEYBOARD    2
+/**
+ * @brief USBHID Device Types
+ */
+enum usbHid_Type_e {
+    USBHID_TYPE_NONE = 0,
+    USBHID_TYPE_MOUSE,
+    USBHID_TYPE_KEYBOARD,
+    USBHID_TYPE_JOYSTICK,
+};
+
+/**
+ * @brief HID Mouse Axis Definitions
+ */
+typedef enum {
+    USBHID_SUCCESS          = 0,
+    USBHID_ERROR            = -1,
+    USBHID_PARAM_INVALID    = -2,
+    USBHID_NO_DEV           = -3,
+    USBHID_IO_ERROR         = -4,
+    USBHID_NOT_SUPPORT      = -5,
+    USBHID_NOT_HID_DEV      = -6,
+    USBHID_BUFFER_NOT_ALLOC = -7,
+    USBHID_ALLOC_FAILED     = -8
+} usbHid_ErrNo_e;
+
+/**
+ * @brief USBHID Device Structure
+ */
+struct USBHID_Device_t {
+    struct USB_Device_t *pUdev;
+    uint8_t interface_num;
+    uint8_t endpoint_in;
+    struct USB_Endpoint_t *endpoint;
+    
+    struct USB_HID_Descriptor_t *hid_desc;
+    uint8_t *raw_hid_report_desc;
+    uint16_t raw_hid_report_desc_len;
+
+    enum usbHid_Type_e hid_type;
+
+    uint8_t *report_buffer;
+    uint32_t report_len;
+    uint32_t report_buff_len;
+    uint32_t report_buffer_last_offset;
+};
 
 /**
  * @brief HID Report Item Format
@@ -136,10 +182,22 @@ struct HID_DataDescriptor_t {
 };
 
 /**
- * @brief Function prototypes
+ * @brief Parsing functions
  */
 uint8_t *HID_fetchItem(uint8_t *pStart, uint8_t *pEnd, struct HID_Item_t *pItem);
 int HID_parseReportDescriptor(uint8_t *pReport, uint16_t len, uint8_t *pType);
+
+/**
+ * @brief USB HID Core Functions
+ */
+int USBHID_open(struct USB_Device_t *pUdev, uint8_t interface_num,
+               struct USBHID_Device_t *pDev);
+void USBHID_close(struct USBHID_Device_t *pDev);
+void USBHID_freeReportBuffer(struct USBHID_Device_t *pDev);
+int USBHID_fetchReport(struct USBHID_Device_t *pDev);
+int USBHID_getReportBuffer(struct USBHID_Device_t *pDev, uint8_t **ppBuff,
+                            uint32_t *pLen, bool isLast);
+int USBHID_allocReportBuffer(struct USBHID_Device_t *pDev, uint32_t len);
 
 #ifdef __cplusplus
 }

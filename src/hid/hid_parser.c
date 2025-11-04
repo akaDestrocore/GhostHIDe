@@ -2,6 +2,19 @@
 
 LOG_MODULE_REGISTER(hid_parser, LOG_LEVEL_DBG);
 
+/* Private function prototypes -----------------------------------------------*/
+static int get_hid_descriptor(struct USB_Device_t *pUdev, uint8_t interfaceNum, 
+                                        struct USB_HID_Descriptor_t **ppHID_Desc);
+static void set_idle(struct USB_Device_t *pUdev, uint8_t interfaceNum, 
+                                            uint8_t duration, uint8_t reportID);
+static int get_ep_in(struct USB_Device_t *pUdev, uint8_t interfaceNum, uint8_t *pEP);
+static int hid_get_class_descriptor(struct USB_Device_t *pUdev, uint8_t interfaceNum, 
+                                        uint8_t type, uint8_t *pBuff, uint16_t len);
+static int set_report(struct USB_Device_t *udev, uint8_t interfaceNum, 
+                                            uint8_t reportType, uint8_t reportID);
+static inline uint8_t *get_report_buffer(struct USBHID_Device_t *pDev, bool isLast);
+static int usbhid_read(struct USBHID_Device_t *pDev, uint8_t *pBuff, int len, int *pActualLen);
+
 /**
  * @brief  Fetch a single HID report descriptor item from a buffer.
  * @param  pStart Pointer to the start of the input buffer (pointer to the first byte to parse).
@@ -189,4 +202,454 @@ int HID_parseReportDescriptor(uint8_t *pReport, uint16_t len, uint8_t *pType)
     }
     
     return 0;
+}
+
+/**
+ * @brief Open a HID device
+ * @param pUdev Pointer to the USB device
+ * @param interface_num Interface number of the HID device
+ * @param pDev Pointer to the USBHID
+ * @return 0 on success, error code otherwise
+ */
+int USBHID_open(struct USB_Device_t *pUdev, uint8_t interface_num, struct USBHID_Device_t *pDev) {
+
+    int ret = -1;
+    struct USB_HID_Descriptor_t *pHID_Desc = NULL;
+    uint8_t *pRawHIDReportDesc = NULL;
+    uint16_t rawHIDReportDescLen = 0;
+    uint8_t hidType;
+    uint8_t epIN;
+    
+    ret = get_hid_descriptor(pUdev, interface_num, &pHID_Desc);
+    if ( ret < 0) {
+        LOG_ERR("Cannot find HID descriptor for interface %d", interface_num);
+        return USBHID_NOT_HID_DEV;
+    }
+
+    LOG_INF("HID descriptor found: version=0x%04X, country=0x%02X", 
+                sys_le16_to_cpu(pHID_Desc->bcdHID), pHID_Desc->bCountryCode);
+    
+    if ( pHID_Desc->bNumDescriptors > 1) {
+        LOG_ERR("Multiple descriptors not supported: %d", pHID_Desc->bNumDescriptors);
+        return USBHID_NOT_SUPPORT;
+    }
+
+    memset(pDev, 0x00, sizeof(struct USBHID_Device_t));
+    set_idle(pUdev, interface_num, 0, 0);
+    
+    rawHIDReportDescLen = sys_le16_to_cpu(pHID_Desc->wClassDescriptorLength);
+    pRawHIDReportDesc = k_malloc(rawHIDReportDescLen);
+    if (NULL == pRawHIDReportDesc) {
+        LOG_ERR("Failed to allocate HID report buffer (len=%d)", rawHIDReportDescLen);
+        return USBHID_ALLOC_FAILED;
+    }
+    memset(pRawHIDReportDesc, 0x00, rawHIDReportDescLen);
+
+    ret = get_ep_in(pUdev, interface_num, &epIN);
+    if (ret < 0) {
+        LOG_ERR("Get endpoint failed for interface %d", interface_num);
+        k_free(pRawHIDReportDesc);
+        return USBHID_NOT_SUPPORT;
+    }
+
+    // Cache the endpoint struct pointer
+    struct USB_Endpoint_t *cachedEP = NULL;
+    if (interface_num < pUdev->interface_count) {
+        struct USB_Interface_t *iface = &pUdev->interfaces[interface_num];
+        if (iface->endpoint_count > 0) {
+            cachedEP = &iface->endpoints[0];
+            LOG_INF("Cached endpoint: ep_addr=0x%02X max_packet=%d", cachedEP->ep_addr, cachedEP->max_packet);
+        }
+    }
+
+    if (NULL == cachedEP) {
+        LOG_ERR("Failed to cache endpoint pointer");
+        k_free(pRawHIDReportDesc);
+        return USBHID_ERROR;
+    }
+
+    // Get HID report descriptor
+    ret = hid_get_class_descriptor(pUdev, interface_num, 0x22, pRawHIDReportDesc, rawHIDReportDescLen);
+    if (ret < 0) {
+        LOG_ERR("Parse HID report failed");
+        k_free(pRawHIDReportDesc);
+        return USBHID_NOT_SUPPORT;
+    }
+
+    // Output reports not necessary for mouse yet
+    if (USBHID_TYPE_KEYBOARD == hidType) {
+        ret = set_report(pUdev, interface_num, HID_REPORT_TYPE_OUTPUT, 0);
+        if (USBHID_SUCCESS != ret) {
+            LOG_ERR("Set report failed");
+            k_free(pRawHIDReportDesc);
+            return USBHID_IO_ERROR;
+        }
+    }
+
+    // TODO: maybe add handling of output reports for mouse as well
+
+    pDev->pUdev = pUdev;
+    pDev->interface_num = interface_num;
+    pDev->endpoint_in = epIN;
+    pDev->raw_hid_report_desc = pRawHIDReportDesc;
+    pDev->raw_hid_report_desc_len = rawHIDReportDescLen;
+    pDev->hid_desc = pHID_Desc;
+    pDev->hid_type = hidType;
+    pDev->endpoint = cachedEP;
+
+    return USBHID_SUCCESS;
+}
+
+/**
+ * @brief Close the HID device
+ * @param pDev Pointer to the HID device
+ * @return 0 on success, error code otherwise
+ */
+void USBHID_close(struct USBHID_Device_t *pDev) {
+
+    if (NULL == pDev) {
+        return;
+    }
+
+    if (NULL != pDev->raw_hid_report_desc) {
+        k_free(pDev->raw_hid_report_desc);
+        pDev->raw_hid_report_desc = NULL;
+    }
+
+    USBHID_freeReportBuffer(pDev);
+    memset(pDev, 0x00, sizeof(struct USBHID_Device_t));
+}
+
+/**
+ * @brief Free the report buffer
+ * @param pDev Pointer to the HID device
+ * @return 0 on success, error code otherwise
+ */
+void USBHID_freeReportBuffer(struct USBHID_Device_t *pDev) {
+
+    if (NULL == pDev) {
+        return;
+    }
+
+    if (NULL != pDev->report_buffer) {
+        k_free(pDev->report_buffer);
+        pDev->report_buffer = NULL;
+    }
+
+    pDev->report_len = 0;
+    pDev->report_buff_len = 0;
+    pDev->report_buffer_last_offset = 0;
+}
+
+int USBHID_fetchReport(struct USBHID_Device_t *pDev) {
+
+    int ret = -1;
+    uint8_t *lastReportBuff;
+    int actualLen = 0;
+
+    if (NULL == pDev) {
+        return USBHID_PARAM_INVALID;
+    }
+
+    lastReportBuff = get_report_buffer(pDev, true);
+    if (0 == lastReportBuff) {
+        LOG_ERR("Report buffer not allocated");
+        return USBHID_BUFFER_NOT_ALLOC;
+    }
+
+    ret = usbhid_read(pDev, lastReportBuff, pDev->report_len, &actualLen);
+
+    if (USBHID_SUCCESS == ret) {
+        if (0 != pDev->report_buffer_last_offset) {
+            pDev->report_buffer_last_offset = 0;
+        } else {
+            pDev->report_buffer_last_offset = pDev->report_len;
+        }
+
+        return USBHID_SUCCESS;
+    }
+
+    if (-EAGAIN == ret) {
+        return USBHID_IO_ERROR;
+    }
+
+    // For other possible return codes return as is
+    return ret;
+}
+
+/**
+ * @brief Get the report buffer
+ * @param pDev Pointer to the device
+ * @param ppBuff Pointer to the report buffer
+ * @param pLen Pointer to the report length
+ * @param isLast True for last report
+ * @return 0 on success, error code otherwise
+ */
+int USBHID_getReportBuffer(struct USBHID_Device_t *pDev, uint8_t **ppBuff, 
+                                            uint32_t *pLen, bool isLast) {
+    
+    uint8_t *pReportBuf;
+
+    if (NULL == pDev || NULL == ppBuff) {
+        return USBHID_PARAM_INVALID;
+    }
+
+    pReportBuf = get_report_buffer(pDev, isLast);
+    if (NULL == pReportBuf) {
+        LOG_ERR("Report buffer not allocated");
+        return USBHID_BUFFER_NOT_ALLOC;
+    }
+
+    if (NULL != ppBuff) {
+        *ppBuff = pReportBuf;
+    }
+
+    if (NULL != pLen) {
+        *pLen = pDev->report_len;
+    }
+
+    return USBHID_SUCCESS;
+}
+
+/**
+ * @brief Allocate memory for report buffer
+ * @param pDev Pointer to device
+ * @param len Length of the report
+ * @return 0 on success, error code otherwise
+ */
+int USBHID_allocReportBuffer(struct USBHID_Device_t *pDev, uint32_t len) {
+
+    if (NULL == pDev) {
+        LOG_ERR("Invalid device pointer");
+        return USBHID_PARAM_INVALID;
+    }
+
+    uint8_t *pBuff;
+    uint32_t buffLen= 0;
+
+    if (NULL != pDev->report_buffer) {
+        LOG_ERR("Report buffer already allocated!");
+        return USBHID_ERROR;
+    }
+
+    // Twice the size of original buffer
+    buffLen = len * 2;
+    pBuff = k_malloc(buffLen);
+
+    if (NULL == pBuff) {
+        LOG_ERR("Failed to allocate report buffer (size=%d)", buffLen);
+        return USBHID_ALLOC_FAILED;
+    }
+
+    memset(pBuff, 0x00, buffLen);
+
+    pDev->report_len = len;
+    pDev->report_buffer = pBuff;
+    pDev->report_buff_len = buffLen;
+    pDev->report_buffer_last_offset = 0;
+
+    return USBHID_SUCCESS;
+}
+
+/* --------------------------------------------------------------------------
+ * HELPER FUNCTIONS
+ * -------------------------------------------------------------------------*/
+static int get_hid_descriptor(struct USB_Device_t *pUdev, uint8_t interfaceNum, 
+                                        struct USB_HID_Descriptor_t **ppHID_Desc) {
+    
+    if (NULL == pUdev || NULL == pUdev->raw_conf_desc) {
+        return -1;
+    }
+
+    struct usb_desc_header *pDesc = (struct usb_desc_header *)pUdev->raw_conf_desc;
+    void *pRawConfDescEnd = (uint8_t *)pUdev->raw_conf_desc + pUdev->raw_conf_desc_len;
+    uint8_t curInterfaceNum = 0;
+
+    while ((void *)pDesc < pRawConfDescEnd) {
+        if (0 == pDesc->bLength) {
+            LOG_ERR("Descriptor with zero length encountered");
+            return -1;
+        }
+
+        switch (pDesc->bDescriptorType) {
+            
+            case USB_DESC_INTERFACE: {
+                curInterfaceNum = ((struct usb_if_descriptor *)pDesc)->bInterfaceNumber;
+                break;
+            }
+
+            case USB_DESC_HID: {
+                if (curInterfaceNum == interfaceNum) {
+                    *ppHID_Desc = (struct USB_HID_Descriptor_t *)pDesc;
+                    return 0;
+                }
+
+                break;
+            }
+
+            default: {
+                break;
+            }
+
+        }
+
+        pDesc = (struct usb_desc_header *)((uint8_t *)pDesc + pDesc->bLength);
+    }
+
+    return -1;
+}
+
+static void set_idle(struct USB_Device_t *pUdev, uint8_t interfaceNum, uint8_t duration, uint8_t reportID) {
+
+    int ret = -1;
+
+    ret = ch375_hostControlTransfer(pUdev, USB_REQ_TYPE(USB_DIR_OUT, 
+        USB_TYPE_CLASS, USB_RECIP_INTERFACE), HID_SET_IDLE, (duration << 8) | 
+        reportID, interfaceNum, NULL, 0, NULL, TRANSFER_TIMEOUT);
+
+    if (CH375_HOST_SUCCESS != ret) {
+        LOG_ERR("Set idle failed: %d", ret);
+    }
+}
+
+static int get_ep_in(struct USB_Device_t *pUdev, uint8_t interfaceNum, uint8_t *pEP) {
+    
+    if (interfaceNum >= pUdev->interface_count) {
+        return -1;
+    }
+
+    struct USB_Interface_t *iface = &pUdev->interfaces[interfaceNum];
+
+    if (iface->endpoint_count < 1) {
+        LOG_ERR("Interface %d has no endpoints", interfaceNum);
+        return -1;
+    }
+
+    *pEP = iface->endpoints[0].ep_addr;
+    return 0;
+}
+
+static int hid_get_class_descriptor(struct USB_Device_t *pUdev, uint8_t interfaceNum, 
+                                        uint8_t type, uint8_t *pBuff, uint16_t len) {
+    
+    int ret = -1;
+    uint8_t retries = 4;
+    int actualLen = 0;
+
+    // 0x81 | STANDARD | INTERFACE
+    do {
+        ret = ch375_hostControlTransfer(pUdev,
+            USB_REQ_TYPE(USB_DIR_IN, USB_TYPE_STANDARD, USB_RECIP_INTERFACE), 
+            USB_SREQ_GET_DESCRIPTOR, type << 8, interfaceNum, pBuff, len, 
+                                                &actualLen, TRANSFER_TIMEOUT);
+
+        if (CH375_HOST_SUCCESS != ret) {
+            LOG_ERR("Get class descriptor failed: %d", ret);
+        }
+
+        retries--;
+    } while (actualLen < len && retries > 0);
+
+    if (actualLen < len) {
+        LOG_ERR("Insufficient data: actual=%d, expected=%d", actualLen, len);
+        return USBHID_ERROR;
+    }
+
+    return USBHID_SUCCESS;
+}
+
+static int set_report(struct USB_Device_t *pUdev, uint8_t interfaceNum, uint8_t reportType, 
+                                                                        uint8_t reportID) {
+    
+    int ret = -1;
+    uint8_t retries = 4;
+    int actualLen = 0;
+    uint8_t dataFragment = 0x01;
+
+    // 0x21 | CLASS | INTERFACE
+    do {
+        ret = ch375_hostControlTransfer(pUdev, USB_REQ_TYPE(USB_DIR_OUT, USB_TYPE_CLASS, USB_RECIP_INTERFACE),
+        HID_SET_REPORT, (reportType << 8) | reportID, interfaceNum, &dataFragment, sizeof(dataFragment), 
+                                                                            &actualLen, TRANSFER_TIMEOUT);
+        if (CH375_HOST_SUCCESS != ret) {
+            LOG_ERR("Set report failed: %d", ret);
+        }
+
+        retries--;
+    } while (actualLen != sizeof(dataFragment) && retries > 0);
+
+    return ret;
+}
+
+static inline uint8_t *get_report_buffer(struct USBHID_Device_t *pDev, bool isLast) {
+    
+    if (NULL == pDev || NULL == pDev->report_buffer) {
+        return NULL;
+    }
+
+    if (true == isLast) {
+        return pDev->report_buffer + pDev->report_buffer_last_offset;
+    } else {
+        uint32_t offset = pDev->report_buffer_last_offset ? 0 : pDev->report_len;
+        return pDev->report_buffer + offset;
+    }
+}
+
+static int usbhid_read(struct USBHID_Device_t *pDev, uint8_t *pBuff, int len, int *pActualLen) {
+
+    int ret = -1;
+    struct USB_Device_t *pUdev = pDev->pUdev;
+    struct ch375_Context_t *pCtx = pUdev->ctx;
+    struct USB_Endpoint_t *pEP = pDev->endpoint;
+    
+    uint8_t status;
+    int offset = 0;
+
+    if (NULL == pEP) {
+        LOG_ERR("No cached endpoint!");
+        return USBHID_ERROR;
+    }
+    
+    // Set retry mode for INT transfers
+    ret = ch375_setRetry(pCtx, CH375_RETRY_TIMES_ZERO);
+    if (CH375_SUCCESS != ret) {
+        return USBHID_IO_ERROR;
+    }
+
+
+    // Send IN token
+    ret = ch375_sendToken(pCtx, pEP->ep_addr, pEP->data_toggle, USB_PID_IN, &status);
+    if (CH375_SUCCESS != ret) {
+        return USBHID_IO_ERROR;
+    }
+
+    // Check status
+    if (CH375_USB_INT_SUCCESS == status) {
+        uint8_t readLen;
+        ret = ch375_readBlockData(pCtx, pBuff, len, &readLen);
+        if (CH375_SUCCESS != ret) {
+            return USBHID_IO_ERROR;
+        }
+        
+        pEP->data_toggle = !pEP->data_toggle;
+
+        if (NULL != pActualLen) {
+            *pActualLen = readLen;
+        }
+
+        return USBHID_SUCCESS;
+    }
+
+    if (CH375_PID2STATUS(USB_PID_NAK) == status) {
+        if(NULL != pActualLen) {
+            *pActualLen = 0;
+        }
+        return -EAGAIN;
+    }
+
+    if (CH375_USB_INT_DISCONNECT == status) {
+        return USBHID_NO_DEV;
+    }
+
+    return USBHID_IO_ERROR;
 }
