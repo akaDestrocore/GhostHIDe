@@ -4,11 +4,13 @@
 #include "ch375_host.h"
 #include "ch375_uart.h"
 #include "hid_parser.h"
+#include "hid_mouse.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
 /* Private function prototypes -----------------------------------------------*/
 static void dump_hid_items(uint8_t *ppReport, uint16_t len);
+static int test_mouse(struct USBHID_Device_t *pHIDDev);
 
 /**
   * @brief  The application entry point.
@@ -18,6 +20,7 @@ int main(void)
 {
     struct ch375_Context_t *pCtx;
     struct USB_Device_t udev;
+    struct USBHID_Device_t hidDev;
     int ret;
     uint8_t *pDesc, *pDescEnd;
     
@@ -28,7 +31,7 @@ int main(void)
         .dt_flags = GPIO_ACTIVE_LOW
     };
     
-    LOG_INF("=================== HID Parser Test ===================");
+    LOG_INF("=================== HID Mouse Test ===================");
     
     LOG_INF("Initializing CH375.");
     ret = ch375_hwInitManual("CH375", 2, &ch375_int, 9600, &pCtx);
@@ -115,190 +118,38 @@ int main(void)
 
     if (hidInterface < 0) {
         LOG_ERR("No HID interface found!");
+        ch375_hostUdevClose(&udev);
         return -1;
     }
     
-    // Get HID descriptor from config descriptor
-    LOG_INF("\n=================== Parsing Configuration Descriptor ===================");
-    LOG_HEXDUMP_INF(udev.raw_conf_desc, udev.raw_conf_desc_len, "Config Descriptor");
-    
-    // Find HID class
-    pDesc = udev.raw_conf_desc;
-    pDescEnd = pDesc + udev.raw_conf_desc_len;
-    struct USB_HID_Descriptor_t *pHidDesc = NULL;
-    uint8_t currentInterface = 0;
-    
-    while (pDesc < pDescEnd) {
-        struct usb_desc_header *pHdr = (struct usb_desc_header *)pDesc;
-        
-        if (0 == pHdr->bLength) break;
-        
-        if (USB_DESC_INTERFACE == pHdr->bDescriptorType) {
-            currentInterface = ((struct usb_if_descriptor *)pDesc)->bInterfaceNumber;
-        } else if (pHdr->bDescriptorType == 0x21 && currentInterface == hidInterface) {
-            pHidDesc = (struct USB_HID_Descriptor_t *)pDesc;
-            break;
-        }
-        
-        pDesc += pHdr->bLength;
-    }
-    
-    if (NULL == pHidDesc) {
-        LOG_ERR("HID descriptor not found!");
-        return -1;
-    }
-    
-    LOG_INF("\n=================== HID Descriptor ===================");
-    LOG_INF("  bcdHID = 0x%04X", sys_le16_to_cpu(pHidDesc->bcdHID));
-    LOG_INF("  bCountryCode = 0x%02X", pHidDesc->bCountryCode);
-    LOG_INF("  bNumDescriptors = %d", pHidDesc->bNumDescriptors);
-    LOG_INF("  bDescriptorType = 0x%02X", pHidDesc->bClassDescriptorType);
-    LOG_INF("  wDescriptorLength = %d", 
-            sys_le16_to_cpu(pHidDesc->wClassDescriptorLength));
-    
-    // Get HID report descriptor
-    uint16_t reportDescLen = sys_le16_to_cpu(pHidDesc->wClassDescriptorLength);
-    uint8_t *pReportDesc = k_malloc(reportDescLen);
-    if (NULL == pReportDesc) {
-        LOG_ERR("Failed to allocate report descriptor buffer");
-        return -ENOMEM;
-    }
-    
-    LOG_INF("\n=================== Fetching HID Report Descriptor ===================");
-    ret = ch375_hostControlTransfer(&udev, 0x81, USB_SREQ_GET_DESCRIPTOR, 
-        0x22 << 8, hidInterface, pReportDesc, reportDescLen, NULL, 5000);
-    
-    if (CH375_HOST_SUCCESS != ret) {
-        LOG_ERR("Failed to get report descriptor: %d", ret);
-        k_free(pReportDesc);
+    // Open HID device
+    LOG_INF("\n=================== Opening HID Device ===================");
+    ret = USBHID_open(&udev, hidInterface, &hidDev);
+    if (USBHID_SUCCESS != ret) {
+        LOG_ERR("Failed to open HID device: %d", ret);
+        ch375_hostUdevClose(&udev);
         return ret;
     }
     
-    LOG_INF("Report descriptor fetched successfully!");
-    LOG_HEXDUMP_INF(pReportDesc, reportDescLen, "Raw Report Descriptor");
+    LOG_INF("HID device opened successfully!");
+    LOG_INF("  Device Type: %s", 
+            hidDev.hid_type == USBHID_TYPE_MOUSE ? "MOUSE" :
+            hidDev.hid_type == USBHID_TYPE_KEYBOARD ? "KEYBOARD" : "UNKNOWN");
+    LOG_INF("  Report Descriptor Length: %d", hidDev.raw_hid_report_desc_len);
     
-    LOG_INF("\n=================== TEST 1: Parse HID Items ===================");
-    dump_hid_items(pReportDesc, reportDescLen);
-    
-    LOG_INF("\n=================== TEST 2: Determine Device Type ===================");
-    uint8_t deviceType = 0;
-    ret = HID_parseReportDescriptor(pReportDesc, reportDescLen, &deviceType);
-    if (ret < 0) {
-        LOG_ERR("Failed to parse report descriptor: %d", ret);
+    // Test mouse functionality if it's a mouse
+    if (USBHID_TYPE_MOUSE == hidDev.hid_type) {
+        LOG_INF("\n=================== Testing Mouse Functionality ===================");
+        ret = test_mouse(&hidDev);
+        if (ret < 0) {
+            LOG_ERR("Mouse functionality test failed: %d", ret);
+        }
     } else {
-        const char *pTypeStr = "Unknown";
-        switch (deviceType) {
-            case 1: {
-                pTypeStr = "MOUSE"; 
-                break;
-            }
-
-            case 2: {
-                pTypeStr = "KEYBOARD"; 
-                break;
-            }
-
-            case 3: {
-                pTypeStr = "JOYSTICK"; 
-                break;
-            }
-        }
-        LOG_INF("Device Type: %s (by report descriptor)", pTypeStr);
+        LOG_WRN("Device is not a mouse, skipping mouse tests");
     }
 
-    if (0 == deviceType) {
-        if (1 == udev.interfaces[hidInterface].interface_protocol) {
-            deviceType = 2;
-            LOG_INF("Fallback: KEYBOARD (by USB interface protocol)");
-        } else if (2 == udev.interfaces[hidInterface].interface_protocol) {
-            deviceType = 1;
-            LOG_INF("Fallback: MOUSE (by USB interface protocol)");
-        }
-    }
-
-    LOG_INF("\n=================== TEST 3: Find Key Report Fields ===================");
-
-    struct HID_Item_t item;
-    pDesc = pReportDesc;
-    pDescEnd = pReportDesc + reportDescLen;
-
-    uint32_t usage_page = 0;
-    uint32_t report_size = 0;
-    uint32_t report_count = 0;
-    uint32_t report_offset = 0;
-    int32_t logical_min = 0;
-    int32_t logical_max = 0;
-
-    while (pDesc < pDescEnd) {
-        pDesc = HID_fetchItem(pDesc, pDescEnd, &item);
-        if (NULL == pDesc) break;
-        
-        if (HID_ITEM_TYPE_GLOBAL == item.type) {
-            switch (item.tag) {
-                case HID_GLOBAL_ITEM_TAG_USAGE_PAGE: {
-                    usage_page = item.data.u32 << 16;
-                    break;
-                }
-                    
-                case HID_GLOBAL_ITEM_TAG_REPORT_SIZE: {
-                    report_size = item.data.u32;
-                    break;
-                }
-                    
-                case HID_GLOBAL_ITEM_TAG_REPORT_COUNT: {
-                    report_count = item.data.u32;
-                    break;
-                }
-                    
-                case HID_GLOBAL_ITEM_TAG_LOGICAL_MINIMUM: {
-                    if (1 == item.size) {
-                        logical_min = (int8_t)item.data.u8;
-                    } else if (2 == item.size) {
-                        logical_min = (int16_t)item.data.u16;
-                    } else {
-                        logical_min = item.data.s32;
-                    }
-                    break;
-                }
-                    
-                case HID_GLOBAL_ITEM_TAG_LOGICAL_MAXIMUM: {
-                    if (1 == item.size) {
-                        logical_max = (int8_t)item.data.u8;
-                    } else if (2 == item.size) {
-                        logical_max = (int16_t)item.data.u16;
-                    } else {
-                        logical_max = item.data.s32;
-                    }
-                    break;
-                }
-            }
-
-        } else if (HID_ITEM_TYPE_MAIN == item.type && HID_MAIN_ITEM_TAG_INPUT == item.tag) {
-            // Prevent overflow
-            if (report_size > 0 && report_size <= 32 && report_count > 0 && report_count <= 256) {
-                
-                LOG_INF("  INPUT: offset=%d size=%d count=%d usage_page=0x%08X log_min=%d log_max=%d",
-                    report_offset, report_size, report_count, usage_page, logical_min, logical_max);
-                
-                if (HID_UP_BUTTON == usage_page) {
-                    LOG_INF("    -> Buttons field (byte offset=%d)", 
-                            report_offset / 8);
-                } else if (HID_UP_GENDESK == usage_page) {
-                    LOG_INF("    -> Generic Desktop field (X/Y/Wheel, byte offset=%d)", 
-                            report_offset / 8);
-                }
-                
-                report_offset += report_size * report_count;
-            } else {
-                LOG_WRN("  INPUT with invalid size/count: size=%d count=%d (usage_page=0x%08X) - SKIPPED",
-                        report_size, report_count, usage_page);
-            }
-        }
-    }
-
-    LOG_INF("Total report length: %d bytes", (report_offset + 7) / 8);
-    
-    k_free(pReportDesc);
+    // Cleanup
+    USBHID_close(&hidDev);
     ch375_hostUdevClose(&udev);
     
     while (1) {
@@ -308,6 +159,13 @@ int main(void)
     return 0;
 }
 
+
+/**
+ * @brief Dump the contents of a report descriptor
+ * @param pReport Pointer to the report descriptor
+ * @param len Length of the report descriptor
+ * @return None
+ */
 static void dump_hid_items(uint8_t *pReport, uint16_t len) {
     struct HID_Item_t item;
     uint8_t *pItemCur = pReport;
@@ -464,4 +322,110 @@ static void dump_hid_items(uint8_t *pReport, uint16_t len) {
     }
     
     LOG_INF("Total items parsed: %d", itemCount);
+}
+
+/**
+ * @brief Test mouse functionality
+ * @param pHIDDev Pointer to the HID device
+ * @return 0 on success, error code otherwise
+ */
+static int test_mouse(struct USBHID_Device_t *pHIDDev) {
+    
+    struct HID_Mouse_t mouse;
+    int ret;
+    
+    // Open mouse
+    LOG_INF("Opening mouse device...");
+    ret = hidMouse_Open(pHIDDev, &mouse);
+    if (USBHID_SUCCESS != ret) {
+        LOG_ERR("Failed to open mouse: %d", ret);
+        return ret;
+    }
+    
+    LOG_INF("Mouse opened successfully!");
+    LOG_INF("  Report Length: %d bytes", mouse.report_len);
+    LOG_INF("  Button Field: offset=%d size=%d count=%d", 
+            mouse.button.report_buf_off, mouse.button.size, mouse.button.count);
+    LOG_INF("  Orientation Field: offset=%d size=%d count=%d", 
+            mouse.orientation.report_buf_off, mouse.orientation.size, mouse.orientation.count);
+    
+    // Test reading
+    LOG_INF("\n--- Reading Mouse Reports (move mouse now!) ---");
+    int successCount = 0;
+    int timeoutCount = 0;
+    
+    for (int i = 0; i < 50; i++) {
+        ret = hidMouse_FetchReport(&mouse);
+        
+        if (USBHID_SUCCESS == ret) {
+            uint32_t leftBtn = 0, rightBtn = 0, middleBtn = 0;
+            int32_t x = 0, y = 0;
+            
+            // Get button states
+            hidMouse_GetButton(&mouse, HID_MOUSE_BUTTON_LEFT, &leftBtn, true);
+            hidMouse_GetButton(&mouse, HID_MOUSE_BUTTON_RIGHT, &rightBtn, true);
+            hidMouse_GetButton(&mouse, HID_MOUSE_BUTTON_MIDDLE, &middleBtn, true);
+            
+            // Get orientation
+            hidMouse_GetOrientation(&mouse, HID_MOUSE_AXIS_X, &x, true);
+            hidMouse_GetOrientation(&mouse, HID_MOUSE_AXIS_Y, &y, true);
+            
+            LOG_INF("Sample %d: L=%d R=%d M=%d X=%d Y=%d", 
+                    i, leftBtn, rightBtn, middleBtn, x, y);
+            
+            successCount++;
+            
+            // Dump raw report
+            if (successCount <= 3) {
+                uint8_t *reportBuf;
+                uint32_t reportLen;
+                ret = USBHID_getReportBuffer(pHIDDev, &reportBuf, &reportLen, true);
+                if (USBHID_SUCCESS == ret) {
+                    LOG_HEXDUMP_INF(reportBuf, reportLen, "Raw Report");
+                }
+            }
+        } else if (ret == -EAGAIN) {
+            // No data available - this is normal when mouse is idle
+            timeoutCount++;
+            if (timeoutCount % 10 == 0) {
+                LOG_DBG("Waiting for mouse input... (%d timeouts)", timeoutCount);
+            }
+        } else {
+            LOG_ERR("Fetch report failed: %d", ret);
+            break;
+        }
+        
+        // Poll every 50ms
+        k_msleep(50);
+    }
+    
+    LOG_INF("Capture complete: %d successful reads, %d timeouts", successCount, timeoutCount);
+    
+    // Test write
+    LOG_INF("\n--- Testing Write Operations ---");
+    hidMouse_SetButton(&mouse, HID_MOUSE_BUTTON_LEFT, 1, false);
+    hidMouse_SetOrientation(&mouse, HID_MOUSE_AXIS_X, 10, false);
+    hidMouse_SetOrientation(&mouse, HID_MOUSE_AXIS_Y, -5, false);
+    
+    uint32_t testBtn;
+    int32_t testX, testY;
+    hidMouse_GetButton(&mouse, HID_MOUSE_BUTTON_LEFT, &testBtn, false);
+    hidMouse_GetOrientation(&mouse, HID_MOUSE_AXIS_X, &testX, false);
+    hidMouse_GetOrientation(&mouse, HID_MOUSE_AXIS_Y, &testY, false);
+    
+    LOG_INF("Modified report: L=%d X=%d Y=%d", testBtn, testX, testY);
+    
+    // Show raw buffer
+    uint8_t *reportBuf;
+    uint32_t reportLen;
+    ret = USBHID_getReportBuffer(pHIDDev, &reportBuf, &reportLen, false);
+    if (USBHID_SUCCESS == ret) {
+        LOG_HEXDUMP_INF(reportBuf, reportLen, "Modified Raw Report");
+    }
+    
+    // Close mouse
+    hidMouse_Close(&mouse);
+    LOG_INF("Mouse closed successfully");
+    
+    return 0;
 }

@@ -1,0 +1,73 @@
+#ifndef HID_MOUSE_H
+#define HID_MOUSE_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <zephyr/kernel.h>
+#include <zephyr/sys/byteorder.h>
+#include <zephyr/logging/log.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include "ch375_host.h"
+#include "hid_parser.h"
+
+/**
+ * @brief HID Mouse Button Definitions
+ */
+typedef enum {
+    HID_MOUSE_BUTTON_LEFT   = 0,
+    HID_MOUSE_BUTTON_RIGHT  = 1,
+    HID_MOUSE_BUTTON_MIDDLE = 2,
+    HID_MOUSE_BUTTON_4      = 3,
+    HID_MOUSE_BUTTON_5      = 4
+} hidMouse_Button_e;
+
+/**
+ * @brief HID Mouse Axis Definitions
+ */
+typedef enum {
+    HID_MOUSE_AXIS_X        = 0,
+    HID_MOUSE_AXIS_Y        = 1,
+    HID_MOUSE_AXIS_WHEEL    = 2
+} hidMouse_Axis_e;
+
+// Forward declare USB device and HID descriptor
+struct USB_Device_t;
+struct USB_HID_Descriptor_t;
+
+/**
+ * @brief HID Mouse Structure
+ */
+struct HID_Mouse_t {
+    struct USBHID_Device_t *hid_dev;
+    uint32_t report_len;
+    struct HID_DataDescriptor_t button;
+    struct HID_DataDescriptor_t orientation;
+};
+
+/**
+ * @brief HID Mouse Functions
+ */
+int hidMouse_Open(struct USBHID_Device_t *pHIDDev, struct HID_Mouse_t *pMouse);
+void hidMouse_Close(struct HID_Mouse_t *pMouse);
+int hidMouse_FetchReport(struct HID_Mouse_t *pMouse);
+
+/**
+ * @brief Button functions
+ */
+int hidMouse_GetButton(struct HID_Mouse_t *pMouse, uint32_t buttonNum, uint32_t *pValue, bool isLast);
+int hidMouse_SetButton(struct HID_Mouse_t *pMouse, uint32_t buttonNum, uint32_t value, bool isLast);
+
+/**
+ * @brief Orientation functions
+ */
+int hidMouse_GetOrientation(struct HID_Mouse_t *pMouse, uint32_t axisNum, int32_t *pValue, bool isLast);
+int hidMouse_SetOrientation(struct HID_Mouse_t *pMouse, uint32_t axisNum, int32_t value, bool isLast);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* HID_MOUSE_H */
