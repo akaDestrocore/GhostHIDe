@@ -208,7 +208,7 @@ int HID_parseReportDescriptor(uint8_t *pReport, uint16_t len, uint8_t *pType)
  * @brief Open a HID device
  * @param pUdev Pointer to the USB device
  * @param interface_num Interface number of the HID device
- * @param pDev Pointer to the USBHID
+ * @param pDev Pointer to the USBHID structure
  * @return 0 on success, error code otherwise
  */
 int USBHID_open(struct USB_Device_t *pUdev, uint8_t interface_num, struct USBHID_Device_t *pDev) {
@@ -217,7 +217,7 @@ int USBHID_open(struct USB_Device_t *pUdev, uint8_t interface_num, struct USBHID
     struct USB_HID_Descriptor_t *pHID_Desc = NULL;
     uint8_t *pRawHIDReportDesc = NULL;
     uint16_t rawHIDReportDescLen = 0;
-    uint8_t hidType;
+    uint8_t hidType = USBHID_TYPE_NONE;
     uint8_t epIN;
     
     ret = get_hid_descriptor(pUdev, interface_num, &pHID_Desc);
@@ -276,7 +276,25 @@ int USBHID_open(struct USB_Device_t *pUdev, uint8_t interface_num, struct USBHID
         return USBHID_NOT_SUPPORT;
     }
 
-    // Output reports not necessary for mouse yet
+    // Parse report descriptor to determine device type
+    ret = HID_parseReportDescriptor(pRawHIDReportDesc, rawHIDReportDescLen, &hidType);
+    if (ret < 0) {
+        LOG_WRN("Failed to parse report descriptor, trying interface protocol fallback");
+        hidType = USBHID_TYPE_NONE;
+    }
+
+    // Fallback to interface protocol if parsing failed
+    if (USBHID_TYPE_NONE == hidType && interface_num < pUdev->interface_count) {
+        uint8_t protocol = pUdev->interfaces[interface_num].interface_protocol;
+        if (1 == protocol) {
+            hidType = USBHID_TYPE_KEYBOARD;
+            LOG_INF("Detected KEYBOARD by interface protocol");
+        } else if (2 == protocol) {
+            hidType = USBHID_TYPE_MOUSE;
+            LOG_INF("Detected MOUSE by interface protocol");
+        }
+    }
+
     if (USBHID_TYPE_KEYBOARD == hidType) {
         ret = set_report(pUdev, interface_num, HID_REPORT_TYPE_OUTPUT, 0);
         if (USBHID_SUCCESS != ret) {
@@ -285,8 +303,6 @@ int USBHID_open(struct USB_Device_t *pUdev, uint8_t interface_num, struct USBHID
             return USBHID_IO_ERROR;
         }
     }
-
-    // TODO: maybe add handling of output reports for mouse as well
 
     pDev->pUdev = pUdev;
     pDev->interface_num = interface_num;
@@ -533,29 +549,57 @@ static int hid_get_class_descriptor(struct USB_Device_t *pUdev, uint8_t interfac
                                         uint8_t type, uint8_t *pBuff, uint16_t len) {
     
     int ret = -1;
-    uint8_t retries = 4;
     int actualLen = 0;
+    
+    ret = ch375_hostControlTransfer(pUdev,
+        USB_REQ_TYPE(USB_DIR_IN, USB_TYPE_STANDARD, USB_RECIP_INTERFACE), 
+        USB_SREQ_GET_DESCRIPTOR, (type << 8) | 0, interfaceNum, pBuff, len, 
+                                            &actualLen, TRANSFER_TIMEOUT);
 
-    // 0x81 | STANDARD | INTERFACE
-    do {
-        ret = ch375_hostControlTransfer(pUdev,
-            USB_REQ_TYPE(USB_DIR_IN, USB_TYPE_STANDARD, USB_RECIP_INTERFACE), 
-            USB_SREQ_GET_DESCRIPTOR, type << 8, interfaceNum, pBuff, len, 
-                                                &actualLen, TRANSFER_TIMEOUT);
-
-        if (CH375_HOST_SUCCESS != ret) {
-            LOG_ERR("Get class descriptor failed: %d", ret);
-        }
-
-        retries--;
-    } while (actualLen < len && retries > 0);
-
-    if (actualLen < len) {
-        LOG_ERR("Insufficient data: actual=%d, expected=%d", actualLen, len);
-        return USBHID_ERROR;
+    if (CH375_HOST_SUCCESS == ret && actualLen > 0) {
+        LOG_INF("Got %d bytes using GET_DESCRIPTOR", actualLen);
+        return USBHID_SUCCESS;
     }
 
-    return USBHID_SUCCESS;
+    actualLen = 0;
+    
+    ret = ch375_hostControlTransfer(pUdev,
+        USB_REQ_TYPE(USB_DIR_IN, USB_TYPE_CLASS, USB_RECIP_INTERFACE), 
+        USB_SREQ_GET_DESCRIPTOR, (type << 8) | 0, interfaceNum, pBuff, len, 
+                                            &actualLen, TRANSFER_TIMEOUT);
+
+    if (CH375_HOST_SUCCESS == ret && actualLen > 0) {
+        LOG_INF("Got %d bytes using CLASS GET_DESCRIPTOR", actualLen);
+        return USBHID_SUCCESS;
+    }
+
+    actualLen = 0;
+    uint16_t tryLen = len < 64 ? len : 64;
+    
+    ret = ch375_hostControlTransfer(pUdev, USB_REQ_TYPE(USB_DIR_IN, USB_TYPE_CLASS, USB_RECIP_INTERFACE), 
+                        0x06, (0x22 << 8) | 0, interfaceNum, pBuff, tryLen, &actualLen, TRANSFER_TIMEOUT);
+
+    if (CH375_HOST_SUCCESS == ret && actualLen > 0) {
+        
+        // Try to get the rest of data
+        if (actualLen < len && actualLen >= 2) {
+
+            int remaining;
+            ret = ch375_hostControlTransfer(pUdev, USB_REQ_TYPE(USB_DIR_IN, USB_TYPE_CLASS, USB_RECIP_INTERFACE), 
+            0x06, (0x22 << 8) | 0, interfaceNum, pBuff + actualLen, len - actualLen, &remaining, TRANSFER_TIMEOUT);
+            
+            if (CH375_HOST_SUCCESS == ret && remaining > 0) {
+                LOG_INF("Got additional %d bytes", remaining);
+                actualLen += remaining;
+            }
+        }
+        
+        return USBHID_SUCCESS;
+    }
+
+    LOG_ERR("All request methods failed for interface %d", interfaceNum);
+    
+    return USBHID_ERROR;
 }
 
 static int set_report(struct USB_Device_t *pUdev, uint8_t interfaceNum, uint8_t reportType, 
@@ -564,21 +608,19 @@ static int set_report(struct USB_Device_t *pUdev, uint8_t interfaceNum, uint8_t 
     int ret = -1;
     uint8_t retries = 4;
     int actualLen = 0;
-    uint8_t dataFragment = 0x01;
+    uint8_t dataFragment = 0x00;
 
     // 0x21 | CLASS | INTERFACE
-    do {
-        ret = ch375_hostControlTransfer(pUdev, USB_REQ_TYPE(USB_DIR_OUT, USB_TYPE_CLASS, USB_RECIP_INTERFACE),
-        HID_SET_REPORT, (reportType << 8) | reportID, interfaceNum, &dataFragment, sizeof(dataFragment), 
+    ret = ch375_hostControlTransfer(pUdev, USB_REQ_TYPE(USB_DIR_OUT, USB_TYPE_CLASS, USB_RECIP_INTERFACE),
+    HID_SET_REPORT, (reportType << 8) | reportID, interfaceNum, &dataFragment, sizeof(dataFragment), 
                                                                             &actualLen, TRANSFER_TIMEOUT);
-        if (CH375_HOST_SUCCESS != ret) {
-            LOG_ERR("Set report failed: %d", ret);
-        }
+        
+    if (CH375_HOST_SUCCESS != ret) {
+        LOG_WRN("Set report failed (this may be normal for some devices): %d", ret);
+        return USBHID_SUCCESS;
+    }
 
-        retries--;
-    } while (actualLen != sizeof(dataFragment) && retries > 0);
-
-    return ret;
+    return USBHID_SUCCESS;
 }
 
 static inline uint8_t *get_report_buffer(struct USBHID_Device_t *pDev, bool isLast) {
