@@ -349,6 +349,8 @@ static int test_mouse(struct USBHID_Device_t *pHIDDev) {
     LOG_INF("  Orientation Field: offset=%d size=%d count=%d", 
             mouse.orientation.report_buf_off, mouse.orientation.size, mouse.orientation.count);
     
+    k_msleep(1500);
+
     // Test reading
     LOG_INF("\n--- Reading Mouse Reports (move mouse now!) ---");
     int successCount = 0;
