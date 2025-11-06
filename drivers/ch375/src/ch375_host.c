@@ -398,7 +398,12 @@ int ch375_hostControlTransfer(struct USB_Device_t *pUdev, uint8_t reqType, uint8
 
     pCtx = pUdev->ctx;
 
-    ret = ch375_setRetry(pCtx, CH375_RETRY_TIMES_INFINITY);
+    if (USB_SREQ_GET_DESCRIPTOR == bRequest) {
+        ret = ch375_setRetry(pCtx, CH375_RETRY_TIMES_2MS);
+        LOG_DBG("Using tolerant retry for GET_DESCRIPTOR");
+    } else {
+        ret = ch375_setRetry(pCtx, CH375_RETRY_TIMES_INFINITY);
+    }
     if ( CH375_SUCCESS != ret) {
         LOG_ERR("Set retry failed: %d", ret);
         return CH375_HOST_ERROR;
@@ -441,44 +446,112 @@ int ch375_hostControlTransfer(struct USB_Device_t *pUdev, uint8_t reqType, uint8
     toggle = true;
 
     if (wLength > 0) {
-        while (totalReceived < wLength) {
-            uint8_t packetLen = 0;
-
-            if (SETUP_IN(reqType)) {
+        if (SETUP_IN(reqType)) {
+            uint32_t stalls = 0;
+            uint32_t naks = 0;
+            
+            while (totalReceived < wLength) {
+                uint8_t packetLen = 0;
+                
                 ret = ch375_sendToken(pCtx, 0x00, toggle, USB_PID_IN, &status);
-                if ( CH375_SUCCESS != ret) {
+                if (CH375_SUCCESS != ret) {
                     LOG_ERR("Send IN token failed: %d", ret);
                     return CH375_HOST_ERROR;
                 }
 
                 if (CH375_USB_INT_SUCCESS != status) {
-                    LOG_ERR("IN token failed, status: 0x%02X", status);
+                    // Handle NAK
+                    if (status == CH375_PID2STATUS(USB_PID_NAK)) {
+                        naks++;
+                        if (naks % 100 == 0) {
+                            LOG_DBG("NAK count: %d (received so far: %d/%d)", 
+                                   naks, totalReceived, wLength);
+                        }
+                        
+                        // For large descriptors wait longer
+                        if (totalReceived > 0) {
+                            k_busy_wait(500);
+                        } else {
+                            k_busy_wait(100);
+                        }
+                        
+                        // Don't toggle on NAK
+                        continue;
+                    }
+                    
+                    // Handle STALL
+                    if (status == CH375_PID2STATUS(USB_PID_STALL)) {
+                        stalls++;
+                        LOG_ERR("STALL during IN data (received: %d/%d, stalls: %d)", 
+                               totalReceived, wLength, stalls);
+                        
+                        if (stalls > 3) {
+                            return CH375_HOST_STALL;
+                        }
+                        
+                        // Try to continue
+                        k_msleep(10);
+                        continue;
+                    }
+                    
+                    LOG_ERR("IN token failed, status: 0x%02X (received: %d/%d)", 
+                           status, totalReceived, wLength);
+                    
                     if (CH375_USB_INT_DISCONNECT == status) {
                         return CH375_HOST_DEV_DISCONNECT;
                     }
-
-                    if (status == CH375_PID2STATUS(USB_PID_STALL)) {
-                        return CH375_HOST_STALL;
+                    
+                    // Return data if any 
+                    if (totalReceived > 0) {
+                        LOG_WRN("Partial data transfer, returning %d bytes", totalReceived);
+                        break;
                     }
-                    LOG_ERR("Unhandled status: 0x%02X", status);
+                    
                     return CH375_HOST_ERROR;
                 }
 
-                ret = ch375_readBlockData(pCtx, pData + totalReceived, wLength - totalReceived, &packetLen);
+                // Read data
+                ret = ch375_readBlockData(pCtx, pData + totalReceived, 
+                                        wLength - totalReceived, &packetLen);
                 
                 if (CH375_SUCCESS != ret) {
-                    LOG_ERR("Read data failed: %d", ret);
+                    LOG_ERR("Read data failed: %d (received: %d/%d)", 
+                           ret, totalReceived, wLength);
+                    
+                    // Return any data we got so far
+                    if (totalReceived > 0) {
+                        LOG_WRN("Partial read, returning %d bytes", totalReceived);
+                        break;
+                    }
                     return CH375_HOST_ERROR;
                 }
 
-                totalReceived += packetLen;
-                toggle = !toggle;
+                if (packetLen > 0) {
+                    totalReceived += packetLen;
+                    toggle = !toggle;
+                    
+                    LOG_DBG("Received packet: len=%d, total=%d/%d, toggle=%d", 
+                           packetLen, totalReceived, wLength, toggle);
+                }
 
+                // Short packet indicates EOT
                 if (packetLen < pUdev->ep0_max_packet) {
-                    // Short packet ends DATA stage
+                    LOG_DBG("Short packet (%d < %d), transfer complete at %d/%d bytes",
+                           packetLen, pUdev->ep0_max_packet, totalReceived, wLength);
                     break;
                 }
-            } else {
+
+                if (totalReceived < wLength) {
+                    k_busy_wait(100);
+                }
+            }
+            
+            if (naks > 0) {
+                LOG_DBG("Transfer complete after %d NAKs", naks);
+            }
+            
+        } else {
+            while (totalReceived < wLength) {
                 uint8_t toSend = wLength - totalReceived;
                 if (toSend > pUdev->ep0_max_packet) {
                     toSend = pUdev->ep0_max_packet;
@@ -504,16 +577,11 @@ int ch375_hostControlTransfer(struct USB_Device_t *pUdev, uint8_t reqType, uint8
                     if (status == CH375_PID2STATUS(USB_PID_STALL)) {
                         return CH375_HOST_STALL;
                     }
-                    LOG_ERR("Unhandled status: 0x%02X", status);
                     return CH375_HOST_ERROR;
                 }
                 
                 totalReceived += toSend;
                 toggle = !toggle;
-            }
-
-            if (totalReceived < wLength) {
-                k_busy_wait(100);
             }
         }
     }
@@ -524,17 +592,43 @@ int ch375_hostControlTransfer(struct USB_Device_t *pUdev, uint8_t reqType, uint8
         ret = ch375_writeBlockData(pCtx, dummy, 0);
         if (CH375_SUCCESS != ret) {
             LOG_ERR("Write status OUT failed: %d", ret);
+            
+            if (totalReceived > 0) {
+                LOG_WRN("Status write failed but data received, treating as success");
+                if (NULL != pActualLen) {
+                    *pActualLen = totalReceived;
+                }
+                return CH375_HOST_SUCCESS;
+            }
             return CH375_HOST_ERROR;
         }
 
         ret = ch375_sendToken(pCtx, 0x00, 0x01, USB_PID_OUT, &status);
         if (CH375_SUCCESS != ret) {
             LOG_ERR("Send status OUT token failed: %d", ret);
+            
+            if (totalReceived > 0) {
+                LOG_WRN("Status token failed but data received, treating as success");
+                if (NULL != pActualLen) {
+                    *pActualLen = totalReceived;
+                }
+                return CH375_HOST_SUCCESS;
+            }
             return CH375_HOST_ERROR;
         }
 
         if (status != CH375_USB_INT_SUCCESS) {
             LOG_ERR("Status OUT failed: 0x%02X", status);
+            
+            if (totalReceived > 0) {
+                LOG_WRN("Status stage failed (0x%02X) but %d bytes received successfully, ignoring error",
+                       status, totalReceived);
+                if (NULL != pActualLen) {
+                    *pActualLen = totalReceived;
+                }
+                return CH375_HOST_SUCCESS;
+            }
+            
             if (CH375_USB_INT_DISCONNECT == status) {
                 return CH375_HOST_DEV_DISCONNECT;
             }
