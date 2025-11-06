@@ -360,20 +360,20 @@ void USBHID_freeReportBuffer(struct USBHID_Device_t *pDev) {
 int USBHID_fetchReport(struct USBHID_Device_t *pDev) {
 
     int ret = -1;
-    uint8_t *lastReportBuff;
+    uint8_t *pLastReportBuff;
     int actualLen = 0;
 
     if (NULL == pDev) {
         return USBHID_PARAM_INVALID;
     }
 
-    lastReportBuff = get_report_buffer(pDev, true);
-    if (0 == lastReportBuff) {
+    pLastReportBuff = get_report_buffer(pDev, true);
+    if (NULL == pLastReportBuff) {
         LOG_ERR("Report buffer not allocated");
         return USBHID_BUFFER_NOT_ALLOC;
     }
 
-    ret = usbhid_read(pDev, lastReportBuff, pDev->report_len, &actualLen);
+    ret = usbhid_read(pDev, pLastReportBuff, pDev->report_len, &actualLen);
 
     if (USBHID_SUCCESS == ret) {
         if (0 != pDev->report_buffer_last_offset) {
@@ -386,7 +386,7 @@ int USBHID_fetchReport(struct USBHID_Device_t *pDev) {
     }
 
     if (-EAGAIN == ret) {
-        return USBHID_IO_ERROR;
+        return -EAGAIN;;
     }
 
     // For other possible return codes return as is
@@ -546,59 +546,84 @@ static int get_ep_in(struct USB_Device_t *pUdev, uint8_t interfaceNum, uint8_t *
 }
 
 static int hid_get_class_descriptor(struct USB_Device_t *pUdev, uint8_t interfaceNum, 
-                                        uint8_t type, uint8_t *pBuff, uint16_t len) {
+                                    uint8_t type, uint8_t *pBuff, uint16_t len) {
     
     int ret = -1;
     int actualLen = 0;
     
-    ret = ch375_hostControlTransfer(pUdev,
-        USB_REQ_TYPE(USB_DIR_IN, USB_TYPE_STANDARD, USB_RECIP_INTERFACE), 
-        USB_SREQ_GET_DESCRIPTOR, (type << 8) | 0, interfaceNum, pBuff, len, 
-                                            &actualLen, TRANSFER_TIMEOUT);
-
-    if (CH375_HOST_SUCCESS == ret && actualLen > 0) {
-        LOG_INF("Got %d bytes using GET_DESCRIPTOR", actualLen);
-        return USBHID_SUCCESS;
-    }
-
-    actualLen = 0;
-    
-    ret = ch375_hostControlTransfer(pUdev,
-        USB_REQ_TYPE(USB_DIR_IN, USB_TYPE_CLASS, USB_RECIP_INTERFACE), 
-        USB_SREQ_GET_DESCRIPTOR, (type << 8) | 0, interfaceNum, pBuff, len, 
-                                            &actualLen, TRANSFER_TIMEOUT);
-
-    if (CH375_HOST_SUCCESS == ret && actualLen > 0) {
-        LOG_INF("Got %d bytes using CLASS GET_DESCRIPTOR", actualLen);
-        return USBHID_SUCCESS;
-    }
-
-    actualLen = 0;
-    uint16_t tryLen = len < 64 ? len : 64;
-    
-    ret = ch375_hostControlTransfer(pUdev, USB_REQ_TYPE(USB_DIR_IN, USB_TYPE_CLASS, USB_RECIP_INTERFACE), 
-                        0x06, (0x22 << 8) | 0, interfaceNum, pBuff, tryLen, &actualLen, TRANSFER_TIMEOUT);
-
-    if (CH375_HOST_SUCCESS == ret && actualLen > 0) {
+    if (len > 64) {
+        actualLen = 0;
+        ret = ch375_hostControlTransfer(pUdev, USB_REQ_TYPE(USB_DIR_IN, USB_TYPE_STANDARD, USB_RECIP_INTERFACE), 
+                USB_SREQ_GET_DESCRIPTOR, (type << 8) | 0, interfaceNum, pBuff, 64, &actualLen, TRANSFER_TIMEOUT);
         
-        // Try to get the rest of data
-        if (actualLen < len && actualLen >= 2) {
-
-            int remaining;
-            ret = ch375_hostControlTransfer(pUdev, USB_REQ_TYPE(USB_DIR_IN, USB_TYPE_CLASS, USB_RECIP_INTERFACE), 
-            0x06, (0x22 << 8) | 0, interfaceNum, pBuff + actualLen, len - actualLen, &remaining, TRANSFER_TIMEOUT);
+        if (CH375_HOST_SUCCESS == ret && actualLen > 0) {
+            LOG_INF("Initial read got %d bytes", actualLen);
             
-            if (CH375_HOST_SUCCESS == ret && remaining > 0) {
-                LOG_INF("Got additional %d bytes", remaining);
-                actualLen += remaining;
+            // If we got less than requested then - that's all 
+            if (actualLen < 64) {
+                LOG_INF(" Complete descriptor received: %d bytes", actualLen);
+                return USBHID_SUCCESS;
             }
+            
+            // Try to get the rest
+            if (len > actualLen) {
+                int remainingLen = len - actualLen;
+                int additionalLen = 0;
+                
+                LOG_DBG("Attempting to read remaining %d bytes", remainingLen);
+                ret = ch375_hostControlTransfer(pUdev, USB_REQ_TYPE(USB_DIR_IN, USB_TYPE_STANDARD, USB_RECIP_INTERFACE),
+                USB_SREQ_GET_DESCRIPTOR, (type << 8) | 0, interfaceNum, pBuff + actualLen, remainingLen, 
+                                                                                    &additionalLen, TRANSFER_TIMEOUT);
+                
+                if (CH375_HOST_SUCCESS == ret && additionalLen > 0) {
+                    LOG_INF(" Got additional %d bytes, total %d", additionalLen, actualLen + additionalLen);
+                    return USBHID_SUCCESS;
+                }
+            }
+            
+            // Any data is success
+            LOG_INF(" Partial descriptor: %d bytes", actualLen);
+            return USBHID_SUCCESS;
         }
-        
+    }
+    
+    actualLen = 0;
+    ret = ch375_hostControlTransfer(pUdev, USB_REQ_TYPE(USB_DIR_IN, USB_TYPE_STANDARD, USB_RECIP_INTERFACE), 
+            USB_SREQ_GET_DESCRIPTOR, (type << 8) | 0, interfaceNum, pBuff, len, &actualLen, TRANSFER_TIMEOUT);
+    
+    if (CH375_HOST_SUCCESS == ret && actualLen > 0) {
+        LOG_INF(" STANDARD/INTERFACE succeeded: %d bytes", actualLen);
         return USBHID_SUCCESS;
     }
-
-    LOG_ERR("All request methods failed for interface %d", interfaceNum);
+    LOG_DBG(" STANDARD/INTERFACE failed: ret=%d actual=%d", ret, actualLen);
     
+    actualLen = 0;
+    ret = ch375_hostControlTransfer(pUdev, USB_REQ_TYPE(USB_DIR_IN, USB_TYPE_CLASS, USB_RECIP_INTERFACE), 
+    USB_SREQ_GET_DESCRIPTOR, (type << 8) | 0, interfaceNum, pBuff, len, &actualLen, TRANSFER_TIMEOUT);
+    
+    if (CH375_HOST_SUCCESS == ret && actualLen > 0) {
+        return USBHID_SUCCESS;
+    }
+    
+    actualLen = 0;
+    ret = ch375_hostControlTransfer(pUdev, USB_REQ_TYPE(USB_DIR_IN, USB_TYPE_CLASS, USB_RECIP_INTERFACE),0x06, 
+                                (0x22 << 8) | 0, interfaceNum, pBuff, len, &actualLen, TRANSFER_TIMEOUT);
+    
+    if (CH375_HOST_SUCCESS == ret && actualLen > 0) {
+        LOG_INF(" Explicit request succeeded: %d bytes", actualLen);
+        return USBHID_SUCCESS;
+    }
+    
+    actualLen = 0;
+    ret = ch375_hostControlTransfer(pUdev, USB_REQ_TYPE(USB_DIR_IN, USB_TYPE_CLASS, USB_RECIP_INTERFACE), HID_GET_REPORT, 
+                (HID_REPORT_TYPE_INPUT << 8) | 0, interfaceNum, pBuff, len > 64 ? 64 : len, &actualLen, TRANSFER_TIMEOUT);
+    
+    if (CH375_HOST_SUCCESS == ret && actualLen > 0) {
+        LOG_INF(" GET_REPORT succeeded: %d bytes", actualLen);
+        return USBHID_SUCCESS;
+    }
+    
+    LOG_ERR("All descriptor retrieval methods failed for interface %d", interfaceNum);
     return USBHID_ERROR;
 }
 
