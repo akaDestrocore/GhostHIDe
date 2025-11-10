@@ -447,7 +447,6 @@ int ch375_hostControlTransfer(struct USB_Device_t *pUdev, uint8_t reqType, uint8
 
     if (wLength > 0) {
         if (SETUP_IN(reqType)) {
-            uint32_t stalls = 0;
             uint32_t naks = 0;
             
             while (totalReceived < wLength) {
@@ -481,17 +480,7 @@ int ch375_hostControlTransfer(struct USB_Device_t *pUdev, uint8_t reqType, uint8
                     
                     // Handle STALL
                     if (status == CH375_PID2STATUS(USB_PID_STALL)) {
-                        stalls++;
-                        LOG_ERR("STALL during IN data (received: %d/%d, stalls: %d)", 
-                               totalReceived, wLength, stalls);
-                        
-                        if (stalls > 3) {
-                            return CH375_HOST_STALL;
-                        }
-                        
-                        // Try to continue
-                        k_msleep(10);
-                        continue;
+                        return CH375_HOST_STALL;
                     }
                     
                     LOG_ERR("IN token failed, status: 0x%02X (received: %d/%d)", 
