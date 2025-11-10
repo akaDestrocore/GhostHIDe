@@ -364,7 +364,7 @@ int ch375_hostResetDev(struct USB_Device_t *pUdev) {
  * Transfer functions
  * -------------------------------------------------------------------------*/
 /**
-  * @brief Reset device connected to CH375
+  * @brief USB control transfer function
   * @param pUdev Pointer to the device
   * @param reqType Transfer type
   * @param bRequest Request code
@@ -666,7 +666,7 @@ int ch375_hostControlTransfer(struct USB_Device_t *pUdev, uint8_t reqType, uint8
 }
 
 /**
-  * @brief Reset device connected to CH375
+  * @brief Bulk transfer to a device
   * @param pUdev Pointer to the device
   * @param ep Endpoint number
   * @param pData Pointer to data buffer
