@@ -16,10 +16,10 @@ static inline uint8_t *get_report_buffer(struct USBHID_Device_t *pDev, bool isLa
 static int usbhid_read(struct USBHID_Device_t *pDev, uint8_t *pBuff, int len, int *pActualLen);
 
 /**
- * @brief  Fetch a single HID report descriptor item from a buffer.
- * @param  pStart Pointer to the start of the input buffer (pointer to the first byte to parse).
- * @param  pEnd   Pointer one past the last valid byte in the input buffer (exclusive end).
- * @param  pItem  Pointer to the HID_Item_t structure to be filled.
+ * @brief Fetch a single HID report descriptor item from a buffer.
+ * @param pStart Pointer to the start of the input buffer (pointer to the first byte to parse).
+ * @param pEnd Pointer one past the last valid byte in the input buffer (exclusive end).
+ * @param pItem  Pointer to the HID_Item_t structure to be filled.
  * @return Pointer to the next unread byte after the parsed item on success and NULL pointer
  * on error.
  */
@@ -106,94 +106,83 @@ uint8_t *HID_fetchItem(uint8_t *pStart, uint8_t *pEnd, struct HID_Item_t *pItem)
 }
 
 /**
- * @brief  Parse a report descriptor and return the type of the report descriptor.
+ * @brief Parse a report descriptor and return the type of the report descriptor.
  * @param pReport pointer to the report descriptor
  * @param len length of the report descriptor
- * @param pType pointer to the type of the report
+ * @param pType pointer to the type handle of the report
  * @return 0 on success, error code otherwise
  * on error.
  */
 int HID_parseReportDescriptor(uint8_t *pReport, uint16_t len, uint8_t *pType)
 {
     struct HID_Item_t item = {0};
-    uint8_t *end = pReport + len;
-    uint8_t *cur = pReport;
-    uint32_t usage_page = 0;
+    uint8_t *pEnd = pReport + len;
+    uint8_t *pCur = pReport;
+    uint32_t usagePage = 0;
     uint32_t usage = 0;
-    bool found_device_type = false;
+    bool deviceTypeFound = false;
     
-    if (!pReport || !pType || len < 2) {
+    if (NULL == pReport || NULL == pType || len < 2) {
         return -EINVAL;
     }
     
     *pType = 0;
     
-    /* Iterate through the entire descriptor looking for standard HID collections */
-    while (cur < end && !found_device_type) {
-        cur = HID_fetchItem(cur, end, &item);
-        if (!cur) break;
+    // Iterate through the entire descriptor
+    while (pCur < pEnd && true != deviceTypeFound) {
+        pCur = HID_fetchItem(pCur, pEnd, &item);
+        if (!pCur) break;
         
-        if (item.type == HID_ITEM_TYPE_GLOBAL && 
-            item.tag == HID_GLOBAL_ITEM_TAG_USAGE_PAGE) {
-            /* Store usage page (can be 1, 2, or 4 bytes) */
-            usage_page = item.data.u32 << 16;
+        if (HID_ITEM_TYPE_GLOBAL == item.type && HID_GLOBAL_ITEM_TAG_USAGE_PAGE == item.tag) {
+            usagePage = item.data.u32 << 16;
         }
-        else if (item.type == HID_ITEM_TYPE_LOCAL && 
-                 item.tag == HID_LOCAL_ITEM_TAG_USAGE) {
-            /* Store usage */
-            usage = usage_page | item.data.u32;
+        else if (HID_ITEM_TYPE_LOCAL == item.type && HID_LOCAL_ITEM_TAG_USAGE == item.tag) {
+            // Store usage
+            usage = usagePage | item.data.u32;
         }
-        else if (item.type == HID_ITEM_TYPE_MAIN && 
-                 item.tag == HID_MAIN_ITEM_TAG_BEGIN_COLLECTION) {
-            /* Check if this is a standard HID application collection */
-            
-            if (usage == HID_GD_MOUSE) {
+        else if (HID_ITEM_TYPE_MAIN == item.type && HID_MAIN_ITEM_TAG_BEGIN_COLLECTION == item.tag) {
+            // Check if this is a standard HID app collection
+            if (HID_GD_MOUSE == usage) {
                 *pType = USBHID_TYPE_MOUSE;
-                found_device_type = true;
+                deviceTypeFound = true;
                 LOG_INF("Detected HID Mouse (usage=0x%08X)", usage);
             }
-            else if (usage == HID_GD_KEYBOARD) {
+            else if (HID_GD_KEYBOARD == usage) {
                 *pType = USBHID_TYPE_KEYBOARD;
-                found_device_type = true;
+                deviceTypeFound = true;
                 LOG_INF("Detected HID Keyboard (usage=0x%08X)", usage);
             }
-            /* Add other device types as needed */
         }
     }
     
-    if (!found_device_type) {
-        /* Fallback: analyze interface protocol from USB interface descriptor
-         * This should have been passed in or checked elsewhere, but we can
-         * make an educated guess based on descriptor structure */
+    if (true != deviceTypeFound) {
+        pCur = pReport;
+        bool hasInput = false;
+        bool hasOutput = false;
+        int inputCount = 0;
         
-        cur = pReport;
-        bool has_input = false;
-        bool has_output = false;
-        int input_count = 0;
-        
-        while (cur < end) {
-            cur = HID_fetchItem(cur, end, &item);
-            if (!cur) break;
+        while (pCur < pEnd) {
+            pCur = HID_fetchItem(pCur, pEnd, &item);
+            if (!pCur) break;
             
-            if (item.type == HID_ITEM_TYPE_MAIN) {
-                if (item.tag == HID_MAIN_ITEM_TAG_INPUT) {
-                    has_input = true;
-                    input_count++;
-                } else if (item.tag == HID_MAIN_ITEM_TAG_OUTPUT) {
-                    has_output = true;
+            if (HID_ITEM_TYPE_MAIN == item.type) {
+                if (HID_MAIN_ITEM_TAG_INPUT == item.tag) {
+                    hasInput = true;
+                    inputCount++;
+                } else if (HID_MAIN_ITEM_TAG_OUTPUT == item.tag) {
+                    hasOutput = true;
                 }
             }
         }
         
-        /* Keyboards typically have OUTPUT for LEDs, mice don't */
-        if (has_input && has_output) {
+        if (true == hasInput && true == hasOutput) {
             *pType = USBHID_TYPE_KEYBOARD;
-            LOG_INF("Detected HID Keyboard (by OUTPUT presence - likely vendor-specific)");
+            LOG_INF("Detected HID Device - likely a keyboard");
             return 0;
         }
-        else if (has_input) {
+        else if (true == hasInput) {
             *pType = USBHID_TYPE_MOUSE;
-            LOG_INF("Detected HID Mouse (by INPUT only - likely vendor-specific)");
+            LOG_INF("Detected HID device - likely a mouse");
             return 0;
         }
         
@@ -217,8 +206,11 @@ int USBHID_open(struct USB_Device_t *pUdev, uint8_t interface_num, struct USBHID
     struct USB_HID_Descriptor_t *pHID_Desc = NULL;
     uint8_t *pRawHIDReportDesc = NULL;
     uint16_t rawHIDReportDescLen = 0;
+    struct HID_Item_t item;
     uint8_t hidType = USBHID_TYPE_NONE;
     uint8_t epIN;
+    uint8_t *pCur;
+    uint8_t *pEnd;
     
     ret = get_hid_descriptor(pUdev, interface_num, &pHID_Desc);
     if ( ret < 0) {
@@ -232,6 +224,21 @@ int USBHID_open(struct USB_Device_t *pUdev, uint8_t interface_num, struct USBHID
     if ( pHID_Desc->bNumDescriptors > 1) {
         LOG_ERR("Multiple descriptors not supported: %d", pHID_Desc->bNumDescriptors);
         return USBHID_NOT_SUPPORT;
+    }
+
+    pCur = pRawHIDReportDesc;
+    pEnd = pCur + rawHIDReportDescLen;
+    memset(&item, 0x00, sizeof(struct HID_Item_t));
+    
+    while (pCur < pEnd) {
+        pCur = HID_fetchItem(pCur, pEnd, &item);
+        if (NULL == pCur) {
+            break;
+        }
+        
+        if (HID_ITEM_TYPE_GLOBAL == item.type && HID_GLOBAL_ITEM_TAG_REPORT_ID == item.tag) {
+            break;
+        }
     }
 
     memset(pDev, 0x00, sizeof(struct USBHID_Device_t));
@@ -386,7 +393,7 @@ int USBHID_fetchReport(struct USBHID_Device_t *pDev) {
     }
 
     if (-EAGAIN == ret) {
-        return -EAGAIN;;
+        return -EAGAIN;
     }
 
     // For other possible return codes return as is
