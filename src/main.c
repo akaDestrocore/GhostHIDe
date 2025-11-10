@@ -364,13 +364,13 @@ static int test_mouse(struct USBHID_Device_t *pHIDDev) {
             int32_t x = 0, y = 0;
             
             // Get button states
-            hidMouse_GetButton(&mouse, HID_MOUSE_BUTTON_LEFT, &leftBtn, true);
-            hidMouse_GetButton(&mouse, HID_MOUSE_BUTTON_RIGHT, &rightBtn, true);
-            hidMouse_GetButton(&mouse, HID_MOUSE_BUTTON_MIDDLE, &middleBtn, true);
+            hidMouse_GetButton(&mouse, HID_MOUSE_BUTTON_LEFT, &leftBtn, false);
+            hidMouse_GetButton(&mouse, HID_MOUSE_BUTTON_RIGHT, &rightBtn, false);
+            hidMouse_GetButton(&mouse, HID_MOUSE_BUTTON_MIDDLE, &middleBtn, false);
             
             // Get orientation
-            hidMouse_GetOrientation(&mouse, HID_MOUSE_AXIS_X, &x, true);
-            hidMouse_GetOrientation(&mouse, HID_MOUSE_AXIS_Y, &y, true);
+            hidMouse_GetOrientation(&mouse, HID_MOUSE_AXIS_X, &x, false);
+            hidMouse_GetOrientation(&mouse, HID_MOUSE_AXIS_Y, &y, false);
             
             LOG_INF("Sample %d: L=%d R=%d M=%d X=%d Y=%d", 
                     i, leftBtn, rightBtn, middleBtn, x, y);
@@ -381,7 +381,7 @@ static int test_mouse(struct USBHID_Device_t *pHIDDev) {
             if (successCount <= 3) {
                 uint8_t *reportBuf;
                 uint32_t reportLen;
-                ret = USBHID_getReportBuffer(pHIDDev, &reportBuf, &reportLen, true);
+                ret = USBHID_getReportBuffer(pHIDDev, &reportBuf, &reportLen, false);
                 if (USBHID_SUCCESS == ret) {
                     LOG_HEXDUMP_INF(reportBuf, reportLen, "Raw Report");
                 }

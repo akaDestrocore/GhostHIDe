@@ -43,8 +43,12 @@ struct USB_HID_Descriptor_t;
 struct HID_Mouse_t {
     struct USBHID_Device_t *hid_dev;
     uint32_t report_len;
+    bool has_report_id_declared;
+    uint8_t report_id_offset;
     struct HID_DataDescriptor_t button;
     struct HID_DataDescriptor_t orientation;
+    struct HID_DataDescriptor_t wheel;
+    bool has_wheel;
 };
 
 /**
