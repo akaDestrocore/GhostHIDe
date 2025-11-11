@@ -1,29 +1,54 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * ╔═══════════════════════════════════════════════════════════════════════╗
+ * ║                          GhostHIDe Project                            ║
+ * ╚═══════════════════════════════════════════════════════════════════════╝
+ * 
+ * @file           test_transfers.c
+ * @brief          USB transfer protocol unit tests
+ * 
+ * @author         destrocore
+ * @date           2025
+ * 
+ * @details
+ * Unit tests for USB control and bulk transfers including GET_DESCRIPTOR,
+ * SET_ADDRESS, STALL handling, disconnect detection, multi-packet data
+ * phase, NAK retry logic, and clear stall endpoint recovery.
+ * 
+ * @copyright 
+ * Copyright (c) 2025 akaDestrocore
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
 #include <zephyr/ztest.h>
 #include <zephyr/usb/usb_ch9.h>
 #include "usb_stubs.h"
 #include "ch375_host.h"
 #include "mock_ch375_hw.h"
 
-static struct ch375_Context_t *ctx;
+static struct ch375_Context_t *gCtx;
 static struct USB_Device_t udev;
 
 static void test_setup(void *f)
 {
     mock_ch375Reset();
-    zassert_equal(mock_ch375Init(&ctx), CH375_SUCCESS);
+    zassert_equal(mock_ch375Init(&gCtx), CH375_SUCCESS);
     
     // Initialize minimal USB device structure
     memset(&udev, 0, sizeof(udev));
-    udev.ctx = ctx;
+    udev.ctx = gCtx;
     udev.ep0_max_packet = 64;
     udev.connected = true;
 }
 
 static void test_teardown(void *f)
 {
-    if (ctx) {
-        ch375_closeContext(ctx);
-        ctx = NULL;
+    if (gCtx) {
+        ch375_closeContext(gCtx);
+        gCtx = NULL;
     }
 }
 
@@ -37,7 +62,7 @@ static void queue_control_success_responses(void)
     mock_ch375QueueResponse(CH375_USB_INT_SUCCESS);
 }
 
-static void queue_control_data_in_responses(const uint8_t *data, size_t len)
+static void queue_control_data_in_responses(const uint8_t *pData, size_t len)
 {
     // DATA IN stage success
     mock_ch375SetIntState(true);
@@ -45,7 +70,7 @@ static void queue_control_data_in_responses(const uint8_t *data, size_t len)
     
     // Queue data with length prefix
     mock_ch375QueueResponse(len);
-    mock_ch375QueueResponses(data, len);
+    mock_ch375QueueResponses(pData, len);
     
     // STATUS OUT stage success
     mock_ch375SetIntState(true);
@@ -65,26 +90,26 @@ static void queue_control_status_in_success(void)
 ZTEST(ch375_transfers, test_control_transfer_get_device_descriptor)
 {
     uint8_t buffer[18];
-    int actual_len = 0;
+    int actualLen = 0;
     
     // Simulate device descriptor response
-    uint8_t device_desc[] = {
+    uint8_t pDeviceDesc[] = {
         0x12, 0x01, 0x00, 0x02, 0x00, 0x00, 0x00, 0x40,
         0x5E, 0x04, 0x3B, 0x00, 0x20, 0x01, 0x01, 0x02,
         0x00, 0x01
     };
     
     queue_control_success_responses();
-    queue_control_data_in_responses(device_desc, sizeof(device_desc));
+    queue_control_data_in_responses(pDeviceDesc, sizeof(pDeviceDesc));
     
     // Execute: GET_DESCRIPTOR (Device)
     int ret = ch375_hostControlTransfer(&udev, USB_REQ_TYPE(USB_DIR_IN, USB_TYPE_STANDARD, USB_RECIP_DEVICE), 
-                USB_SREQ_GET_DESCRIPTOR, USB_DESC_DEVICE << 8, 0, buffer, sizeof(buffer), &actual_len, 5000);
+                USB_SREQ_GET_DESCRIPTOR, USB_DESC_DEVICE << 8, 0, buffer, sizeof(buffer), &actualLen, 5000);
     
     // Verify
     zassert_equal(ret, CH375_HOST_SUCCESS);
-    zassert_equal(actual_len, 18);
-    zassert_mem_equal(buffer, device_desc, 18);
+    zassert_equal(actualLen, 18);
+    zassert_mem_equal(buffer, pDeviceDesc, 18);
     
     // Verify command sequence
     zassert_true(mock_ch375VerifyCmdSent(CH375_CMD_WR_USB_DATA7),
@@ -154,7 +179,7 @@ ZTEST(ch375_transfers, test_control_transfer_disconnect)
 ZTEST(ch375_transfers, test_control_transfer_multi_packet)
 {
     uint8_t buffer[128];
-    int actual_len = 0;
+    int actualLen = 0;
     
     // First packet: full 64 bytes
     uint8_t packet1[64];
@@ -184,20 +209,11 @@ ZTEST(ch375_transfers, test_control_transfer_multi_packet)
     mock_ch375QueueResponse(CH375_USB_INT_SUCCESS);
     
     // Execute
-    int ret = ch375_hostControlTransfer(
-        &udev,
-        USB_REQ_TYPE(USB_DIR_IN, USB_TYPE_STANDARD, USB_RECIP_DEVICE),
-        USB_SREQ_GET_DESCRIPTOR,
-        USB_DESC_CONFIGURATION << 8,
-        0,
-        buffer,
-        sizeof(buffer),
-        &actual_len,
-        5000
-    );
+    int ret = ch375_hostControlTransfer( &udev, USB_REQ_TYPE(USB_DIR_IN, USB_TYPE_STANDARD, USB_RECIP_DEVICE), 
+            USB_SREQ_GET_DESCRIPTOR, USB_DESC_CONFIGURATION << 8, 0, buffer, sizeof(buffer), &actualLen, 5000);
     
     zassert_equal(ret, CH375_HOST_SUCCESS);
-    zassert_equal(actual_len, 96, "Should receive 64 + 32 bytes");
+    zassert_equal(actualLen, 96, "Should receive 64 + 32 bytes");
     zassert_mem_equal(buffer, packet1, 64);
     zassert_mem_equal(buffer + 64, packet2, 32);
 }
@@ -216,28 +232,28 @@ ZTEST(ch375_transfers, test_bulk_transfer_in_basic)
     udev.interfaces[0].endpoints[0].data_toggle = false;
     
     uint8_t buffer[64];
-    int actual_len = 0;
-    uint8_t test_data[64];
-    memset(test_data, 0xCC, sizeof(test_data));
+    int actualLen = 0;
+    uint8_t testData[64];
+    memset(testData, 0xCC, sizeof(testData));
     
     // Simulate successful IN transfer
     mock_ch375SetIntState(true);
     mock_ch375QueueResponse(CH375_USB_INT_SUCCESS);
     mock_ch375QueueResponse(64);
-    mock_ch375QueueResponses(test_data, 64);
+    mock_ch375QueueResponses(testData, 64);
     
     int ret = ch375_hostBulkTransfer(
         &udev,
         0x81,
         buffer,
         sizeof(buffer),
-        &actual_len,
+        &actualLen,
         5000
     );
     
     zassert_equal(ret, CH375_HOST_SUCCESS);
-    zassert_equal(actual_len, 64);
-    zassert_mem_equal(buffer, test_data, 64);
+    zassert_equal(actualLen, 64);
+    zassert_mem_equal(buffer, testData, 64);
     zassert_true(udev.interfaces[0].endpoints[0].data_toggle, "Toggle should flip");
 }
 
@@ -254,8 +270,8 @@ ZTEST(ch375_transfers, test_bulk_transfer_nak_then_success)
     udev.interfaces[0].endpoints[0].data_toggle = false;
     
     uint8_t buffer[4];  // Match the expected data size
-    int actual_len = 0;
-    uint8_t test_data[4] = {0x11, 0x22, 0x33, 0x44};
+    int actualLen = 0;
+    uint8_t testData[4] = {0x11, 0x22, 0x33, 0x44};
     
     // First attempt: NAK
     mock_ch375SetIntState(true);
@@ -265,13 +281,13 @@ ZTEST(ch375_transfers, test_bulk_transfer_nak_then_success)
     mock_ch375SetIntState(true);
     mock_ch375QueueResponse(CH375_USB_INT_SUCCESS);
     mock_ch375QueueResponse(4);
-    mock_ch375QueueResponses(test_data, 4);
+    mock_ch375QueueResponses(testData, 4);
     
-    int ret = ch375_hostBulkTransfer(&udev, 0x81, buffer, sizeof(buffer), &actual_len, 5000);
+    int ret = ch375_hostBulkTransfer(&udev, 0x81, buffer, sizeof(buffer), &actualLen, 5000);
     
     zassert_equal(ret, CH375_HOST_SUCCESS);
-    zassert_equal(actual_len, 4);
-    zassert_mem_equal(buffer, test_data, 4);
+    zassert_equal(actualLen, 4);
+    zassert_mem_equal(buffer, testData, 4);
 }
 
 /* ========================================================================
@@ -287,7 +303,7 @@ ZTEST(ch375_transfers, test_bulk_transfer_nak_timeout)
     udev.interfaces[0].endpoints[0].data_toggle = false;
     
     uint8_t buffer[64];
-    int actual_len = 0;
+    int actualLen = 0;
     
     // Keep responding with NAK
     for (int i = 0; i < 10; i++) {
@@ -296,17 +312,10 @@ ZTEST(ch375_transfers, test_bulk_transfer_nak_timeout)
     }
     
     // Short timeout for test speed
-    int ret = ch375_hostBulkTransfer(
-        &udev,
-        0x81,
-        buffer,
-        sizeof(buffer),
-        &actual_len,
-        5
-    );
+    int ret = ch375_hostBulkTransfer(&udev, 0x81, buffer, sizeof(buffer), &actualLen, 5);
     
     zassert_equal(ret, CH375_HOST_TIMEOUT);
-    zassert_equal(actual_len, 0, "No data should be transferred");
+    zassert_equal(actualLen, 0, "No data should be transferred");
 }
 
 /* ========================================================================
@@ -322,16 +331,16 @@ ZTEST(ch375_transfers, test_bulk_transfer_out)
     udev.interfaces[0].endpoints[0].data_toggle = false;
     
     uint8_t data[4] = {0xDE, 0xAD, 0xBE, 0xEF};
-    int actual_len = 0;
+    int actualLen = 0;
     
     // Successful OUT
     mock_ch375SetIntState(true);
     mock_ch375QueueResponse(CH375_USB_INT_SUCCESS);
     
-    int ret = ch375_hostBulkTransfer(&udev, 0x01, data, sizeof(data), &actual_len, 5000);
+    int ret = ch375_hostBulkTransfer(&udev, 0x01, data, sizeof(data), &actualLen, 5000);
     
     zassert_equal(ret, CH375_HOST_SUCCESS);
-    zassert_equal(actual_len, 4);
+    zassert_equal(actualLen, 4);
     
     // Verify data was written
     uint8_t history[20];

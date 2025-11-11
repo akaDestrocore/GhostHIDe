@@ -1,3 +1,28 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * ╔═══════════════════════════════════════════════════════════════════════╗
+ * ║                          GhostHIDe Project                            ║
+ * ╚═══════════════════════════════════════════════════════════════════════╝
+ * 
+ * @file           mock_ch375_hw.c
+ * @brief          CH375 hardware mock implementation
+ * 
+ * @author         destrocore
+ * @date           2025
+ * 
+ * @details
+ * Implements mock CH375 hardware callbacks for unit testing including
+ * write command/data, read data, and INT pin query. Maintains response
+ * queue and command/data history for test assertions.
+ * 
+ * @copyright 
+ * Copyright (c) 2025 akaDestrocore
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
 #include "ch375.h"

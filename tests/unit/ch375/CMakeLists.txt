@@ -15,6 +15,7 @@ target_include_directories(app BEFORE PRIVATE
 # Include directories
 target_include_directories(app PRIVATE
     ${PROJECT_ROOT}/drivers/ch375/include
+    ${PROJECT_ROOT}/drivers/hid/include
     ${CMAKE_CURRENT_SOURCE_DIR}/mocks
 )
 
@@ -22,6 +23,8 @@ target_include_directories(app PRIVATE
 target_sources(app PRIVATE
     ${PROJECT_ROOT}/drivers/ch375/src/ch375.c
     ${PROJECT_ROOT}/drivers/ch375/src/ch375_host.c
+    ${PROJECT_ROOT}/drivers/hid/src/hid_parser.c
+    ${PROJECT_ROOT}/drivers/hid/src/hid_mouse.c
 )
 
 # Mocks
@@ -34,4 +37,6 @@ target_sources(app PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/test_ch375_core.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/test_descriptors.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/test_transfers.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/test_hid_parser.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/test_hid_mouse.c
 )

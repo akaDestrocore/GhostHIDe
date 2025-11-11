@@ -1,3 +1,28 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * ╔═══════════════════════════════════════════════════════════════════════╗
+ * ║                          GhostHIDe Project                            ║
+ * ╚═══════════════════════════════════════════════════════════════════════╝
+ * 
+ * @file           test_ch375_core.c
+ * @brief          CH375 core protocol unit tests
+ * 
+ * @author         destrocore
+ * @date           2025
+ * 
+ * @details
+ * Unit tests for CH375 core functionality including existence check,
+ * version query, USB mode setting, status retrieval, device connection,
+ * token sending, and block data transfers. Depends on mock hardware layer.
+ * 
+ * @copyright 
+ * Copyright (c) 2025 akaDestrocore
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
 #include <zephyr/ztest.h>
 #include "usb_stubs.h"
 #include "ch375.h"
@@ -118,28 +143,28 @@ ZTEST(ch375_core, test_get_status)
  * ======================================================================== */
 ZTEST(ch375_core, test_connect_device_connected)
 {
-    uint8_t conn_status = 0;
+    uint8_t connStatus = 0;
     mock_ch375QueueResponse(CH375_USB_INT_CONNECT);
     
-    int ret = ch375_testConnect(pCtx, &conn_status);
+    int ret = ch375_testConnect(pCtx, &connStatus);
     
     zassert_equal(ret, CH375_SUCCESS);
-    zassert_equal(conn_status, CH375_USB_INT_CONNECT);
+    zassert_equal(connStatus, CH375_USB_INT_CONNECT);
 }
 
 ZTEST(ch375_core, test_connect_device_disconnected)
 {
-    uint8_t conn_status = 0;
+    uint8_t connStatus = 0;
     
     // First response for testConnect
     mock_ch375QueueResponse(CH375_USB_INT_DISCONNECT);
     // Second response for getStatus called internally
     mock_ch375QueueResponse(0x00);
     
-    int ret = ch375_testConnect(pCtx, &conn_status);
+    int ret = ch375_testConnect(pCtx, &connStatus);
     
     zassert_equal(ret, CH375_SUCCESS);
-    zassert_equal(conn_status, CH375_USB_INT_DISCONNECT);
+    zassert_equal(connStatus, CH375_USB_INT_DISCONNECT);
 }
 
 /* ========================================================================
@@ -225,16 +250,16 @@ ZTEST(ch375_core, test_write_block_data)
 ZTEST(ch375_core, test_read_block_data)
 {
     uint8_t buffer[10];
-    uint8_t actual_len;
+    uint8_t actualLen;
     
     // Queue response: length + data
     uint8_t response[] = {4, 0xAA, 0xBB, 0xCC, 0xDD};
     mock_ch375QueueResponses(response, sizeof(response));
     
-    int ret = ch375_readBlockData(pCtx, buffer, sizeof(buffer), &actual_len);
+    int ret = ch375_readBlockData(pCtx, buffer, sizeof(buffer), &actualLen);
     
     zassert_equal(ret, CH375_SUCCESS);
-    zassert_equal(actual_len, 4);
+    zassert_equal(actualLen, 4);
     zassert_equal(buffer[0], 0xAA);
     zassert_equal(buffer[3], 0xDD);
 }
@@ -242,7 +267,7 @@ ZTEST(ch375_core, test_read_block_data)
 ZTEST(ch375_core, test_read_block_data_short_packet)
 {
     uint8_t buffer[10];
-    uint8_t actual_len;
+    uint8_t actualLen;
     
     // Queue: length says 10, but only 3 bytes available
     mock_ch375QueueResponse(10);
@@ -251,10 +276,10 @@ ZTEST(ch375_core, test_read_block_data_short_packet)
     mock_ch375QueueResponse(0x33);
     // No more data should cause timeout
     
-    int ret = ch375_readBlockData(pCtx, buffer, sizeof(buffer), &actual_len);
+    int ret = ch375_readBlockData(pCtx, buffer, sizeof(buffer), &actualLen);
     
     zassert_equal(ret, CH375_SUCCESS);
-    zassert_equal(actual_len, 3, "Should return actual bytes read");
+    zassert_equal(actualLen, 3, "Should return actual bytes read");
 }
 
 /* ========================================================================

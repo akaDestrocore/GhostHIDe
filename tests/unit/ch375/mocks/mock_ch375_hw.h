@@ -1,3 +1,28 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * ╔═══════════════════════════════════════════════════════════════════════╗
+ * ║                          GhostHIDe Project                            ║
+ * ╚═══════════════════════════════════════════════════════════════════════╝
+ * 
+ * @file           mock_ch375_hw.h
+ * @brief          CH375 hardware mock for unit testing
+ * 
+ * @author         destrocore
+ * @date           2025
+ * 
+ * @details
+ * Mock implementation of CH375 hardware interface for isolated unit
+ * testing. Provides response queue, INT pin simulation, and command/data
+ * history tracking for test verification.
+ * 
+ * @copyright 
+ * Copyright (c) 2025 akaDestrocore
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
 #ifndef MOCK_CH375_HW_H
 #define MOCK_CH375_HW_H
 

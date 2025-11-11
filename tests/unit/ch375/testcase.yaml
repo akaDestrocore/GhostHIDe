@@ -20,3 +20,13 @@ tests:
     extra_configs:
       - CONFIG_ZTEST=y
       - CONFIG_LOG_DEFAULT_LEVEL=0
+
+  unit.hid.parser:
+    extra_configs:
+      - CONFIG_ZTEST=y
+      - CONFIG_LOG_DEFAULT_LEVEL=0
+
+  unit.hid.mouse:
+    extra_configs:
+      - CONFIG_ZTEST=y
+      - CONFIG_LOG_DEFAULT_LEVEL=0
