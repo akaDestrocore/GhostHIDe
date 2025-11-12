@@ -1,3 +1,27 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * ╔═══════════════════════════════════════════════════════════════════════╗
+ * ║                          GhostHIDe Project                            ║
+ * ╚═══════════════════════════════════════════════════════════════════════╝
+ * 
+ * @file           hid_mouse.c
+ * @brief          HID mouse device implementation
+ * 
+ * @author         destrocore
+ * @date           2025
+ * 
+ * @details
+ * Implements mouse-specific HID report parsing including button field
+ * extraction, orientation (X/Y) axis handling, and wheel support.
+ * 
+ * @copyright 
+ * Copyright (c) 2025 akaDestrocore
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
 #include "hid_mouse.h"
 
 LOG_MODULE_REGISTER(hid_mouse, LOG_LEVEL_INF);
@@ -238,12 +262,13 @@ int hidMouse_GetOrientation(struct HID_Mouse_t *pMouse, uint32_t axisNum, int32_
         valueByteSize = pDesc->size / 8;
         
         // Wheel is typically 8-bit signed
-        if (valueByteSize == 1) {
+        if (1 == valueByteSize) {
             *pValue = ((int8_t *)pFieldBuff)[0];
-        } else if (valueByteSize == 2) {
-            int16_t temp;
-            memcpy(&temp, pFieldBuff, sizeof(temp));
-            *pValue = (int32_t)sys_le16_to_cpu((uint16_t)temp);
+        } else if (2 == valueByteSize) {
+            uint16_t raw;
+            memcpy(&raw, pFieldBuff, sizeof(raw));
+            raw = sys_le16_to_cpu(raw);
+            *pValue = (int32_t)(int16_t)raw;
         } else {
             *pValue = 0;
         }
@@ -278,20 +303,22 @@ int hidMouse_GetOrientation(struct HID_Mouse_t *pMouse, uint32_t axisNum, int32_
         }
 
         case 2: {
-            int16_t temp;
-            // X is at pFieldBuff[0:1], Y is at pFieldBuff[2:3]
+            // Read 16-bit value as little-endian, then sign-extend to 32-bit
             uint8_t *pAxisStart = pFieldBuff + (axisNum * 2);
-            memcpy(&temp, pAxisStart, sizeof(temp));
-            *pValue = (int32_t)sys_le16_to_cpu((uint16_t)temp);
+            uint16_t raw;
+            memcpy(&raw, pAxisStart, sizeof(raw));
+            raw = sys_le16_to_cpu(raw);
+            // Cast to int16_t for sign extension
+            *pValue = (int32_t)(int16_t)raw;
             break;
         }
 
         case 4: {
-            int32_t temp;
-            // 32-bit: axes are at [0:3] and [4:7]
+            // Read 32-bit value as little-endian
             uint8_t *pAxisStart = pFieldBuff + (axisNum * 4);
-            memcpy(&temp, pAxisStart, sizeof(temp));
-            *pValue = sys_le32_to_cpu((uint32_t)temp);
+            uint32_t raw;
+            memcpy(&raw, pAxisStart, sizeof(raw));
+            *pValue = (int32_t)sys_le32_to_cpu(raw);
             break;
         }
 
@@ -350,15 +377,18 @@ int hidMouse_SetOrientation(struct HID_Mouse_t *pMouse, uint32_t axisNum, int32_
         }
 
         case 2: {
-            int16_t temp = (int16_t)value;
-            uint16_t le_val = sys_cpu_to_le16((uint16_t)temp);
-            memcpy(&((int16_t *)pFieldBuff)[axisNum], &le_val, sizeof(le_val));
+            // Write as little-endian 16-bit
+            uint8_t *pAxisStart = pFieldBuff + (axisNum * 2);
+            uint16_t raw = sys_cpu_to_le16((uint16_t)(int16_t)value);
+            memcpy(pAxisStart, &raw, sizeof(raw));
             break;
         }
 
         case 4: {
-            uint32_t le_val = sys_cpu_to_le32((uint32_t)value);
-            memcpy(&((int32_t *)pFieldBuff)[axisNum], &le_val, sizeof(le_val));
+            // Write as little-endian 32-bit
+            uint8_t *pAxisStart = pFieldBuff + (axisNum * 4);
+            uint32_t raw = sys_cpu_to_le32((uint32_t)value);
+            memcpy(pAxisStart, &raw, sizeof(raw));
             break;
         }
 
@@ -375,25 +405,21 @@ int hidMouse_SetOrientation(struct HID_Mouse_t *pMouse, uint32_t axisNum, int32_
  * HELPER FUNCTIONS
  * -------------------------------------------------------------------------*/
 static int parse_hid_report(struct HID_Mouse_t *pMouse, uint8_t *pReport, uint16_t len) {
-
     struct HID_Item_t item;
     struct HID_DataDescriptor_t *pBtn = &pMouse->button;
     struct HID_DataDescriptor_t *pOrient = &pMouse->orientation;
     struct HID_DataDescriptor_t *pWheel = &pMouse->wheel;
-
     uint8_t *pHIDRep = pReport;
     uint8_t *pHIDRepEnd = pReport + len;
-
     uint32_t usagePage = 0;
     uint32_t usage = 0;
-    uint32_t usageMin = 0;
-    uint32_t usageMax = 0;
+    uint32_t usages[8];
+    uint32_t usageCount = 0;
     int32_t logicalMin = 0;
     int32_t logicalMax = 0;
     uint32_t reportSize = 0;
     uint32_t reportCount = 0;
     uint32_t reportOffset = 0;
-
     bool foundButtons = false;
     bool foundOrientation = false;
     bool foundWheel = false;
@@ -411,16 +437,13 @@ static int parse_hid_report(struct HID_Mouse_t *pMouse, uint8_t *pReport, uint16
         }
 
         switch(item.type) {
-
             case HID_ITEM_TYPE_GLOBAL: {
                 switch(item.tag) {
-
                     case HID_GLOBAL_ITEM_TAG_USAGE_PAGE: {
                         usagePage = item.data.u32 << 16;
                         LOG_INF("  Usage Page: 0x%08X", usagePage);
                         break;
                     }
-
                     case HID_GLOBAL_ITEM_TAG_LOGICAL_MINIMUM: {
                         if (1 == item.size) {
                             logicalMin = (int8_t)item.data.u8;
@@ -432,7 +455,6 @@ static int parse_hid_report(struct HID_Mouse_t *pMouse, uint8_t *pReport, uint16
                         LOG_DBG("  Logical Min: %d", logicalMin);
                         break;
                     }
-
                     case HID_GLOBAL_ITEM_TAG_LOGICAL_MAXIMUM: {
                         if (1 == item.size) {
                             logicalMax = (int8_t)item.data.u8;
@@ -444,19 +466,16 @@ static int parse_hid_report(struct HID_Mouse_t *pMouse, uint8_t *pReport, uint16
                         LOG_DBG("  Logical Max: %d", logicalMax);
                         break;
                     }
-
                     case HID_GLOBAL_ITEM_TAG_REPORT_SIZE: {
                         reportSize = item.data.u32;
                         LOG_DBG("  Report Size: %d bits", reportSize);
                         break;
                     }
-
                     case HID_GLOBAL_ITEM_TAG_REPORT_COUNT: {
                         reportCount = item.data.u32;
                         LOG_DBG("  Report Count: %d", reportCount);
                         break;
                     }
-
                     case HID_GLOBAL_ITEM_TAG_REPORT_ID: {
                         // Report ID actually exists but CH375 strips it from data, so we don't add to reportOffset
                         hasReportId = true;
@@ -464,7 +483,6 @@ static int parse_hid_report(struct HID_Mouse_t *pMouse, uint8_t *pReport, uint16
                         break;
                     }
                 }
-
                 break;
             }
 
@@ -472,6 +490,11 @@ static int parse_hid_report(struct HID_Mouse_t *pMouse, uint8_t *pReport, uint16
                 if (HID_LOCAL_ITEM_TAG_USAGE == item.tag) {
                     usage = usagePage | item.data.u32;
                     LOG_DBG("  Usage: 0x%08X", usage);
+                    
+                    // Store usage in array
+                    if (usageCount < 8) {
+                        usages[usageCount++] = usage;
+                    }
                 }
                 break;
             }
@@ -479,19 +502,16 @@ static int parse_hid_report(struct HID_Mouse_t *pMouse, uint8_t *pReport, uint16
             case HID_ITEM_TYPE_MAIN: {
                 if (HID_MAIN_ITEM_TAG_BEGIN_COLLECTION == item.tag) {
                     collectionDepth++;
-                    
                     // Detect mouse collection
-                    if ((HID_GD_MOUSE  == usage || HID_GD_POINTER == usage) && true != inMouseCollection) {
+                    if ((HID_GD_MOUSE == usage || HID_GD_POINTER == usage) && true != inMouseCollection) {
                         inMouseCollection = true;
                         LOG_INF("Mouse collection found at depth %d (Report ID %s)",
                                 collectionDepth,
                                 hasReportId ? "present but stripped" : "not present");
                         
-                        // Reset field tracking
                         foundButtons = false;
                         foundOrientation = false;
                         foundWheel = false;
-                        // Report ID already stripped
                         reportOffset = 0;
                     }
                 }
@@ -511,12 +531,13 @@ static int parse_hid_report(struct HID_Mouse_t *pMouse, uint8_t *pReport, uint16
                     }
                 }
                 else if (HID_MAIN_ITEM_TAG_INPUT == item.tag) {
-                    LOG_DBG("INPUT: offset=%d size=%d count=%d usage=0x%08X inMouse=%d", 
-                            reportOffset, reportSize, reportCount, usage, inMouseCollection);
+                    LOG_DBG("INPUT: offset=%d size=%d count=%d usageCount=%d inMouse=%d", 
+                            reportOffset, reportSize, reportCount, usageCount, inMouseCollection);
                     
                     if (true != inMouseCollection) {
                         LOG_DBG("  Skipping INPUT (not in mouse collection)");
                         reportOffset += reportSize * reportCount;
+                        usageCount = 0;
                         usage = 0;
                         break;
                     }
@@ -528,47 +549,62 @@ static int parse_hid_report(struct HID_Mouse_t *pMouse, uint8_t *pReport, uint16
                         pBtn->size = reportSize;
                         pBtn->count = reportCount;
                         pBtn->report_buf_off = reportOffset / 8;
-
                         foundButtons = true;
-                        LOG_INF("    -> BUTTONS: byte=%d size=%d count=%d", pBtn->report_buf_off, pBtn->size, pBtn->count);
-
+                        LOG_INF("    -> BUTTONS: byte=%d size=%d count=%d", 
+                                pBtn->report_buf_off, pBtn->size, pBtn->count);
                     }
-
                     // Parse X/Y/Wheel
                     else if (HID_UP_GENDESK == usagePage) {
-                        bool isXAxis = (HID_GD_X == usage);
-                        bool isYAxis = (HID_GD_Y == usage);
-                        bool isWheel = (HID_GD_WHEEL == usage);
+                        bool hasX = false;
+                        bool hasY = false;
+                        bool hasWheel = false;
                         
-                        // X/Y orientation
-                        if ((true == isXAxis || true == isYAxis) && true != foundOrientation && (8 == reportSize || 16 == reportSize) && 2 == reportCount) {
+                        for (uint32_t i = 0; i < usageCount; i++) {
+                            if (usages[i] == HID_GD_X) hasX = true;
+                            if (usages[i] == HID_GD_Y) hasY = true;
+                            if (usages[i] == HID_GD_WHEEL) hasWheel = true;
+                        }
+                        
+                        // X and Y together
+                        if (true == hasX && true == hasY && true != foundOrientation) {
                             pOrient->logical_minimum = logicalMin;
                             pOrient->logical_maximum = logicalMax;
                             pOrient->size = reportSize;
-                            pOrient->count = reportCount;
+                            pOrient->count = 2;
                             pOrient->report_buf_off = reportOffset / 8;
-
                             foundOrientation = true;
                             LOG_INF("  -> ORIENTATION: byte=%d size=%d count=%d", 
                                     pOrient->report_buf_off, pOrient->size, pOrient->count);
+                            
+                            // If wheel is included in same INPUT item
+                            if (true == hasWheel && reportCount >= 3) {
+                                pWheel->logical_minimum = logicalMin;
+                                pWheel->logical_maximum = logicalMax;
+                                pWheel->size = reportSize;
+                                pWheel->count = 1;
+                                pWheel->report_buf_off = (reportOffset + (2 * reportSize)) / 8;
+                                foundWheel = true;
+                                pMouse->has_wheel = true;
+                                LOG_INF("  -> WHEEL: byte=%d size=%d count=%d", 
+                                        pWheel->report_buf_off, pWheel->size, pWheel->count);
+                            }
                         }
-                        // Wheel (separate field)
-                        else if (true == isWheel && true != foundWheel) {
+                        // Standalone wheel
+                        else if (true == hasWheel && true != hasX && true != hasY && true != foundWheel) {
                             pWheel->logical_minimum = logicalMin;
                             pWheel->logical_maximum = logicalMax;
                             pWheel->size = reportSize;
                             pWheel->count = reportCount;
                             pWheel->report_buf_off = reportOffset / 8;
-
                             foundWheel = true;
                             pMouse->has_wheel = true;
-                            LOG_INF("  -> WHEEL: byte=%d size=%d count=%d", pWheel->report_buf_off, pWheel->size, pWheel->count);
+                            LOG_INF("  -> WHEEL: byte=%d size=%d count=%d", 
+                                    pWheel->report_buf_off, pWheel->size, pWheel->count);
                         }
                     }
 
-                    // Advance offset by the size of this field
                     reportOffset += reportSize * reportCount;
-
+                    usageCount = 0;
                     // Clear local state
                     usage = 0;
                 }
@@ -577,19 +613,19 @@ static int parse_hid_report(struct HID_Mouse_t *pMouse, uint8_t *pReport, uint16
         }
     }
 
-    LOG_INF("Parse complete: buttons=%d orientation=%d total_bits=%d", foundButtons, foundOrientation, reportOffset);
+    LOG_INF("Parse complete: buttons=%d orientation=%d total_bits=%d", 
+            foundButtons, foundOrientation, reportOffset);
 
 parse_done:
     if (true != foundButtons || true != foundOrientation) {
-        LOG_ERR("Failed to parse mouse fields: buttons=%d orientation=%d", foundButtons, foundOrientation);
+        LOG_ERR("Failed to parse mouse fields: buttons=%d orientation=%d", 
+                foundButtons, foundOrientation);
         return -1;
     }
 
-    // Calculate report data length
     pMouse->report_len = (reportOffset + 7) / 8;
-    
-    // Store whether Report ID exists
     pMouse->has_report_id_declared = hasReportId;
+    
     if (true == foundWheel) {
         LOG_INF("  Wheel at byte %d", pWheel->report_buf_off);
     }

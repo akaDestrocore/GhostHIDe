@@ -1,3 +1,27 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * ╔═══════════════════════════════════════════════════════════════════════╗
+ * ║                          GhostHIDe Project                            ║
+ * ╚═══════════════════════════════════════════════════════════════════════╝
+ * 
+ * @file           hid_mouse.h
+ * @brief          HID mouse device interface
+ * 
+ * @author         destrocore
+ * @date           2025
+ * 
+ * @details
+ * High-level interface for USB HID mouse devices. Provides functions to
+ * open mouse, fetch reports, and get/set button states and axis values.
+ * 
+ * @copyright 
+ * Copyright (c) 2025 akaDestrocore
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
 #ifndef HID_MOUSE_H
 #define HID_MOUSE_H
 
