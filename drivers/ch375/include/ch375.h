@@ -1,3 +1,28 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * ╔═══════════════════════════════════════════════════════════════════════╗
+ * ║                          GhostHIDe Project                            ║
+ * ╚═══════════════════════════════════════════════════════════════════════╝
+ * 
+ * @file           ch375.h
+ * @brief          CH375 USB host controller driver core interface
+ * 
+ * @author         destrocore
+ * @date           2025
+ * 
+ * @details
+ * Core driver for the CH375 USB host controller chip. Provides low-level
+ * communication primitives for USB device enumeration and data transfer
+ * over UART in 9-bit mode for command/data differentiation.
+ * 
+ * @copyright 
+ * Copyright (c) 2025 akaDestrocore
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
 #ifndef CH375_H
 #define CH375_H
 

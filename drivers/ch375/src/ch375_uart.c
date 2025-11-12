@@ -1,3 +1,28 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * ╔═══════════════════════════════════════════════════════════════════════╗
+ * ║                          GhostHIDe Project                            ║
+ * ╚═══════════════════════════════════════════════════════════════════════╝
+ * 
+ * @file           ch375_uart.c
+ * @brief          CH375 UART hardware interface implementation
+ * 
+ * @author         destrocore
+ * @date           2025
+ * 
+ * @details
+ * Manual UART configuration using STM32 LL drivers for 9-bit mode operation.
+ * Bypasses Zephyr's UART API to enable command/data differentiation via
+ * 9th bit. Implements clock setup, GPIO configuration, and baudrate management.
+ * 
+ * @copyright 
+ * Copyright (c) 2025 akaDestrocore
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
 #include "ch375_uart.h"
 
 LOG_MODULE_REGISTER(ch375_uart, LOG_LEVEL_DBG);

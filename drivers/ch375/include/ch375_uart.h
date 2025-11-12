@@ -1,3 +1,28 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * ╔═══════════════════════════════════════════════════════════════════════╗
+ * ║                          GhostHIDe Project                            ║
+ * ╚═══════════════════════════════════════════════════════════════════════╝
+ * 
+ * @file           ch375_uart.h
+ * @brief          CH375 UART hardware interface definitions
+ * 
+ * @author         destrocore
+ * @date           2025
+ * 
+ * @details
+ * Hardware abstraction layer for CH375 communication via UART. Defines
+ * pin mappings, USART indices, and initialization functions for manual
+ * bare-metal UART configuration in 9-bit mode.
+ * 
+ * @copyright 
+ * Copyright (c) 2025 akaDestrocore
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
 #ifndef CH375_UART_H
 #define CH375_UART_H
 

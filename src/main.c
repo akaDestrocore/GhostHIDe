@@ -1,3 +1,28 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * ╔═══════════════════════════════════════════════════════════════════════╗
+ * ║                          GhostHIDe Project                            ║
+ * ╚═══════════════════════════════════════════════════════════════════════╝
+ * 
+ * @file           main.c
+ * @brief          Main program entry point and HID device testing
+ * 
+ * @author         destrocore
+ * @date           2025
+ * 
+ * @details
+ * Main application demonstrating USB HID device enumeration, descriptor
+ * parsing, and mouse report handling. Tests CH375 host functionality with
+ * real USB mice and keyboards.
+ * 
+ * @copyright 
+ * Copyright (c) 2025 akaDestrocore
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include "ch375.h"

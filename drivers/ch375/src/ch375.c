@@ -1,3 +1,27 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * ╔═══════════════════════════════════════════════════════════════════════╗
+ * ║                          GhostHIDe Project                            ║
+ * ╚═══════════════════════════════════════════════════════════════════════╝
+ * 
+ * @file           ch375.c
+ * @brief          CH375 USB host controller driver сore implementation
+ * 
+ * @author         destrocore
+ * @date           2025
+ * 
+ * @details
+ * Implements the core CH375 protocol including device existence checks,
+ * version queries, USB mode configuration, and data transfer primitives.
+ * 
+ * @copyright 
+ * Copyright (c) 2025 akaDestrocore
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
 #include "ch375.h"
 
 LOG_MODULE_REGISTER(ch375, LOG_LEVEL_DBG);
