@@ -1,3 +1,28 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * ╔═══════════════════════════════════════════════════════════════════════╗
+ * ║                          GhostHIDe Project                            ║
+ * ╚═══════════════════════════════════════════════════════════════════════╝
+ * 
+ * @file           hid_parser.h
+ * @brief          USB HID report descriptor parser interface
+ * 
+ * @author         destrocore
+ * @date           2025
+ * 
+ * @details
+ * Parses USB HID report descriptors to extract button, axis, and other
+ * input field definitions. Identifies mouse, keyboard, and other HID
+ * device types. Manages report buffers and data access.
+ * 
+ * @copyright 
+ * Copyright (c) 2025 akaDestrocore
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
 #ifndef HID_PARSER_H
 #define HID_PARSER_H
 
@@ -132,15 +157,11 @@ typedef enum {
 } HID_LocalItemTag_e;
 
 /* HID Usage Pages */
-#define HID_USAGE_PAGE          0xffff0000
-#define HID_UP_UNDEFINED        0x00000000
 #define HID_UP_GENDESK          0x00010000
 #define HID_UP_KEYBOARD         0x00070000
-#define HID_UP_LED              0x00080000
 #define HID_UP_BUTTON           0x00090000
 
 /* HID Usage IDs */
-#define HID_USAGE               0x0000ffff
 #define HID_GD_POINTER          0x00010001
 #define HID_GD_MOUSE            0x00010002
 #define HID_GD_KEYBOARD         0x00010006

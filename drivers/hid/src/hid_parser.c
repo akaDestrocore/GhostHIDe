@@ -1,3 +1,28 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * ╔═══════════════════════════════════════════════════════════════════════╗
+ * ║                          GhostHIDe Project                            ║
+ * ╚═══════════════════════════════════════════════════════════════════════╝
+ * 
+ * @file           hid_parser.c
+ * @brief          USB HID report descriptor parser implementation
+ * 
+ * @author         destrocore
+ * @date           2025
+ * 
+ * @details
+ * Implements HID item fetching, report descriptor parsing, device type
+ * detection (mouse/keyboard), and report buffer management. Handles
+ * GET_DESCRIPTOR, SET_IDLE, and other HID-specific control requests.
+ * 
+ * @copyright 
+ * Copyright (c) 2025 akaDestrocore
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
 #include "hid_parser.h"
 
 LOG_MODULE_REGISTER(hid_parser, LOG_LEVEL_DBG);
@@ -638,7 +663,6 @@ static int set_report(struct USB_Device_t *pUdev, uint8_t interfaceNum, uint8_t 
                                                                         uint8_t reportID) {
     
     int ret = -1;
-    uint8_t retries = 4;
     int actualLen = 0;
     uint8_t dataFragment = 0x00;
 
@@ -677,7 +701,6 @@ static int usbhid_read(struct USBHID_Device_t *pDev, uint8_t *pBuff, int len, in
     struct USB_Endpoint_t *pEP = pDev->endpoint;
     
     uint8_t status;
-    int offset = 0;
 
     if (NULL == pEP) {
         LOG_ERR("No cached endpoint!");
