@@ -37,6 +37,11 @@ extern "C" {
 #include "ch375_host.h"
 #include "hid_parser.h"
 
+// define report ID byte used by your mouse if any
+#if 1
+#define MOUSE_REPORTID_BYTE 0x01
+#endif
+
 /**
  * @brief HID Mouse Button Definitions
  */
