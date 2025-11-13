@@ -11,6 +11,8 @@ target_sources(app PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/drivers/ch375/src/ch375_host.c
     ${CMAKE_CURRENT_SOURCE_DIR}/drivers/hid/src/hid_parser.c
     ${CMAKE_CURRENT_SOURCE_DIR}/drivers/hid/src/hid_mouse.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/usb_hid_proxy.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/drivers/hid/src/hid_output.c
 )
 
 # Add include dirs
