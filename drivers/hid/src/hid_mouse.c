@@ -102,7 +102,7 @@ int hidMouse_FetchReport(struct HID_Mouse_t *pMouse) {
         return ret;
     }
 
-        ret = USBHID_fetchReport(pMouse->hid_dev);
+    ret = USBHID_fetchReport(pMouse->hid_dev);
     
     // Only run detection when Report ID exists in descriptor
     if (USBHID_SUCCESS == ret && true == pMouse->has_report_id_declared && 0 == pMouse->report_id_offset) {
@@ -404,7 +404,8 @@ int hidMouse_SetOrientation(struct HID_Mouse_t *pMouse, uint32_t axisNum, int32_
 /* --------------------------------------------------------------------------
  * HELPER FUNCTIONS
  * -------------------------------------------------------------------------*/
-static int parse_hid_report(struct HID_Mouse_t *pMouse, uint8_t *pReport, uint16_t len) {
+static int parse_hid_report(struct HID_Mouse_t *pMouse, uint8_t *pReport, uint16_t len) 
+{
     struct HID_Item_t item;
     struct HID_DataDescriptor_t *pBtn = &pMouse->button;
     struct HID_DataDescriptor_t *pOrient = &pMouse->orientation;
