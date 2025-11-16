@@ -29,8 +29,8 @@
 #include "mock_ch375_hw.h"
 
 static struct ch375_Context_t *pCtx;
-static struct USB_Device_t udev;
-static struct USBHID_Device_t hidDev;
+static struct USB_Device_t gUdev;
+static struct USBHID_Device_t gHidDev;
 
 /**
  * @brief ZOWIE FK2 - 6 buttons, 16-bit X/Y, wheel
@@ -242,16 +242,16 @@ static void test_setup(void *f)
     mock_ch375Reset();
     zassert_equal(mock_ch375Init(&pCtx), CH375_SUCCESS);
     
-    memset(&udev, 0x00, sizeof(udev));
-    udev.ctx = pCtx;
+    memset(&gUdev, 0x00, sizeof(gUdev));
+    gUdev.ctx = pCtx;
     
-    memset(&hidDev, 0x00, sizeof(hidDev));
+    memset(&gHidDev, 0x00, sizeof(gHidDev));
 }
 
 static void test_teardown(void *f)
 {
-    if (NULL != hidDev.report_buffer) {
-        USBHID_freeReportBuffer(&hidDev);
+    if (NULL != gHidDev.report_buffer) {
+        USBHID_freeReportBuffer(&gHidDev);
     }
     
     if (NULL != pCtx) {
@@ -269,12 +269,12 @@ ZTEST(hid_mouse, test_open_zowie_fk2)
     uint32_t btnValue = 0;
     int32_t axisValue = 0;
     
-    hidDev.pUdev = &udev;
-    hidDev.hid_type = USBHID_TYPE_MOUSE;
-    hidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
-    hidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
+    gHidDev.pUdev = &gUdev;
+    gHidDev.hid_type = USBHID_TYPE_MOUSE;
+    gHidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
+    gHidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
     
-    int ret = hidMouse_Open(&hidDev, &mouse);
+    int ret = hidMouse_Open(&gHidDev, &mouse);
     zassert_equal(ret, USBHID_SUCCESS);
     
     // Test NULL mouse pointer
@@ -330,25 +330,25 @@ ZTEST(hid_mouse, test_report_buffer_allocation)
 {
     struct HID_Mouse_t mouse;
     
-    hidDev.pUdev = &udev;
-    hidDev.hid_type = USBHID_TYPE_MOUSE;
-    hidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
-    hidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
+    gHidDev.pUdev = &gUdev;
+    gHidDev.hid_type = USBHID_TYPE_MOUSE;
+    gHidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
+    gHidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
     
-    int ret = hidMouse_Open(&hidDev, &mouse);
+    int ret = hidMouse_Open(&gHidDev, &mouse);
     zassert_equal(ret, USBHID_SUCCESS);
     
     // Verify report buffer was allocated
-    zassert_not_null(hidDev.report_buffer, "Report buffer should be allocated");
-    zassert_true(hidDev.report_len > 0, "Report length should be positive");
+    zassert_not_null(gHidDev.report_buffer, "Report buffer should be allocated");
+    zassert_true(gHidDev.report_len > 0, "Report length should be positive");
     
     // Verify buffer is double-buffered
-    zassert_equal(hidDev.report_buff_len, hidDev.report_len * 2);
+    zassert_equal(gHidDev.report_buff_len, gHidDev.report_len * 2);
     
     hidMouse_Close(&mouse);
     
     // Verify buffer was freed
-    zassert_is_null(hidDev.report_buffer, "Report buffer should be freed");
+    zassert_is_null(gHidDev.report_buffer, "Report buffer should be freed");
 }
 
 /* ========================================================================
@@ -358,12 +358,12 @@ ZTEST(hid_mouse, test_button_bit_positions)
 {
     struct HID_Mouse_t mouse;
     
-    hidDev.pUdev = &udev;
-    hidDev.hid_type = USBHID_TYPE_MOUSE;
-    hidDev.raw_hid_report_desc = (uint8_t *)ZOWIE_FK2;
-    hidDev.raw_hid_report_desc_len = sizeof(ZOWIE_FK2);
+    gHidDev.pUdev = &gUdev;
+    gHidDev.hid_type = USBHID_TYPE_MOUSE;
+    gHidDev.raw_hid_report_desc = (uint8_t *)ZOWIE_FK2;
+    gHidDev.raw_hid_report_desc_len = sizeof(ZOWIE_FK2);
     
-    int ret = hidMouse_Open(&hidDev, &mouse);
+    int ret = hidMouse_Open(&gHidDev, &mouse);
     zassert_equal(ret, USBHID_SUCCESS);
     
     // Set each button individually and verify only that button is set
@@ -371,7 +371,7 @@ ZTEST(hid_mouse, test_button_bit_positions)
         // Clear all buttons
         uint8_t *pBuff;
         uint32_t len;
-        USBHID_getReportBuffer(&hidDev, &pBuff, &len, false);
+        USBHID_getReportBuffer(&gHidDev, &pBuff, &len, false);
         memset(pBuff, 0, len);
         
         // Set specific button
@@ -400,12 +400,12 @@ ZTEST(hid_mouse, test_axis_byte_order)
 {
     struct HID_Mouse_t mouse;
     
-    hidDev.pUdev = &udev;
-    hidDev.hid_type = USBHID_TYPE_MOUSE;
-    hidDev.raw_hid_report_desc = (uint8_t *)ZOWIE_FK2;
-    hidDev.raw_hid_report_desc_len = sizeof(ZOWIE_FK2);
+    gHidDev.pUdev = &gUdev;
+    gHidDev.hid_type = USBHID_TYPE_MOUSE;
+    gHidDev.raw_hid_report_desc = (uint8_t *)ZOWIE_FK2;
+    gHidDev.raw_hid_report_desc_len = sizeof(ZOWIE_FK2);
     
-    int ret = hidMouse_Open(&hidDev, &mouse);
+    int ret = hidMouse_Open(&gHidDev, &mouse);
     zassert_equal(ret, USBHID_SUCCESS);
     
     // Set a value that will show byte order issues if wrong
@@ -415,7 +415,7 @@ ZTEST(hid_mouse, test_axis_byte_order)
     // Get raw buffer and check byte order (should be LE)
     uint8_t *pBuff;
     uint32_t len;
-    USBHID_getReportBuffer(&hidDev, &pBuff, &len, false);
+    USBHID_getReportBuffer(&gHidDev, &pBuff, &len, false);
     
     uint8_t *pAxisData = pBuff + mouse.orientation.report_buf_off;
     
@@ -438,12 +438,12 @@ ZTEST(hid_mouse, test_negative_values)
 {
     struct HID_Mouse_t mouse;
     
-    hidDev.pUdev = &udev;
-    hidDev.hid_type = USBHID_TYPE_MOUSE;
-    hidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
-    hidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
+    gHidDev.pUdev = &gUdev;
+    gHidDev.hid_type = USBHID_TYPE_MOUSE;
+    gHidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
+    gHidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
     
-    int ret = hidMouse_Open(&hidDev, &mouse);
+    int ret = hidMouse_Open(&gHidDev, &mouse);
     zassert_equal(ret, USBHID_SUCCESS);
     
     // Test negative values
@@ -467,12 +467,12 @@ ZTEST(hid_mouse, test_boundary_values_8bit)
 {
     struct HID_Mouse_t mouse;
     
-    hidDev.pUdev = &udev;
-    hidDev.hid_type = USBHID_TYPE_MOUSE;
-    hidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
-    hidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
+    gHidDev.pUdev = &gUdev;
+    gHidDev.hid_type = USBHID_TYPE_MOUSE;
+    gHidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
+    gHidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
     
-    int ret = hidMouse_Open(&hidDev, &mouse);
+    int ret = hidMouse_Open(&gHidDev, &mouse);
     zassert_equal(ret, USBHID_SUCCESS);
     
     // Test min value
@@ -501,12 +501,12 @@ ZTEST(hid_mouse, test_boundary_values_16bit)
 {
     struct HID_Mouse_t mouse;
     
-    hidDev.pUdev = &udev;
-    hidDev.hid_type = USBHID_TYPE_MOUSE;
-    hidDev.raw_hid_report_desc = (uint8_t *)ZOWIE_FK2;
-    hidDev.raw_hid_report_desc_len = sizeof(ZOWIE_FK2);
+    gHidDev.pUdev = &gUdev;
+    gHidDev.hid_type = USBHID_TYPE_MOUSE;
+    gHidDev.raw_hid_report_desc = (uint8_t *)ZOWIE_FK2;
+    gHidDev.raw_hid_report_desc_len = sizeof(ZOWIE_FK2);
     
-    int ret = hidMouse_Open(&hidDev, &mouse);
+    int ret = hidMouse_Open(&gHidDev, &mouse);
     zassert_equal(ret, USBHID_SUCCESS);
     
     // Test min value
@@ -530,12 +530,12 @@ ZTEST(hid_mouse, test_report_offset_calculations)
 {
     struct HID_Mouse_t mouse;
     
-    hidDev.pUdev = &udev;
-    hidDev.hid_type = USBHID_TYPE_MOUSE;
-    hidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
-    hidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
+    gHidDev.pUdev = &gUdev;
+    gHidDev.hid_type = USBHID_TYPE_MOUSE;
+    gHidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
+    gHidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
     
-    int ret = hidMouse_Open(&hidDev, &mouse);
+    int ret = hidMouse_Open(&gHidDev, &mouse);
     zassert_equal(ret, USBHID_SUCCESS);
     
     // Byte 0: 3 buttons (bits 0-2) + 5 bits padding
@@ -554,12 +554,12 @@ ZTEST(hid_mouse, test_report_offset_16bit_axes)
 {
     struct HID_Mouse_t mouse;
     
-    hidDev.pUdev = &udev;
-    hidDev.hid_type = USBHID_TYPE_MOUSE;
-    hidDev.raw_hid_report_desc = (uint8_t *)ZOWIE_FK2;
-    hidDev.raw_hid_report_desc_len = sizeof(ZOWIE_FK2);
+    gHidDev.pUdev = &gUdev;
+    gHidDev.hid_type = USBHID_TYPE_MOUSE;
+    gHidDev.raw_hid_report_desc = (uint8_t *)ZOWIE_FK2;
+    gHidDev.raw_hid_report_desc_len = sizeof(ZOWIE_FK2);
     
-    int ret = hidMouse_Open(&hidDev, &mouse);
+    int ret = hidMouse_Open(&gHidDev, &mouse);
     zassert_equal(ret, USBHID_SUCCESS);
     
     // Byte 0: 6 buttons + 2 bits padding
@@ -583,12 +583,12 @@ ZTEST(hid_mouse, test_zero_report_length)
 {
     struct HID_Mouse_t mouse;
     
-    hidDev.pUdev = &udev;
-    hidDev.hid_type = USBHID_TYPE_MOUSE;
-    hidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
-    hidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
+    gHidDev.pUdev = &gUdev;
+    gHidDev.hid_type = USBHID_TYPE_MOUSE;
+    gHidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
+    gHidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
     
-    int ret = hidMouse_Open(&hidDev, &mouse);
+    int ret = hidMouse_Open(&gHidDev, &mouse);
     zassert_equal(ret, USBHID_SUCCESS);
     
     zassert_true(mouse.report_len > 0, "Report length should be positive");
@@ -603,12 +603,12 @@ ZTEST(hid_mouse, test_default_button_state)
 {
     struct HID_Mouse_t mouse;
     
-    hidDev.pUdev = &udev;
-    hidDev.hid_type = USBHID_TYPE_MOUSE;
-    hidDev.raw_hid_report_desc = (uint8_t *)ZOWIE_FK2;
-    hidDev.raw_hid_report_desc_len = sizeof(ZOWIE_FK2);
+    gHidDev.pUdev = &gUdev;
+    gHidDev.hid_type = USBHID_TYPE_MOUSE;
+    gHidDev.raw_hid_report_desc = (uint8_t *)ZOWIE_FK2;
+    gHidDev.raw_hid_report_desc_len = sizeof(ZOWIE_FK2);
     
-    int ret = hidMouse_Open(&hidDev, &mouse);
+    int ret = hidMouse_Open(&gHidDev, &mouse);
     zassert_equal(ret, USBHID_SUCCESS);
     
     // All buttons should be 0 initially
@@ -628,12 +628,12 @@ ZTEST(hid_mouse, test_default_axis_values)
 {
     struct HID_Mouse_t mouse;
     
-    hidDev.pUdev = &udev;
-    hidDev.hid_type = USBHID_TYPE_MOUSE;
-    hidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
-    hidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
+    gHidDev.pUdev = &gUdev;
+    gHidDev.hid_type = USBHID_TYPE_MOUSE;
+    gHidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
+    gHidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
     
-    int ret = hidMouse_Open(&hidDev, &mouse);
+    int ret = hidMouse_Open(&gHidDev, &mouse);
     zassert_equal(ret, USBHID_SUCCESS);
     
     // Axes should be 0 initially
@@ -654,13 +654,13 @@ ZTEST(hid_mouse, test_multiple_open_close)
 {
     struct HID_Mouse_t mouse;
     
-    hidDev.pUdev = &udev;
-    hidDev.hid_type = USBHID_TYPE_MOUSE;
-    hidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
-    hidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
+    gHidDev.pUdev = &gUdev;
+    gHidDev.hid_type = USBHID_TYPE_MOUSE;
+    gHidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
+    gHidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
     
     for (int i = 0; i < 3; i++) {
-        int ret = hidMouse_Open(&hidDev, &mouse);
+        int ret = hidMouse_Open(&gHidDev, &mouse);
         zassert_equal(ret, USBHID_SUCCESS);
         
         // Use the mouse
@@ -672,7 +672,7 @@ ZTEST(hid_mouse, test_multiple_open_close)
         hidMouse_Close(&mouse);
         
         // Verify buffer was freed
-        zassert_is_null(hidDev.report_buffer);
+        zassert_is_null(gHidDev.report_buffer);
     }
 }
 
@@ -683,12 +683,12 @@ ZTEST(hid_mouse, test_open_razer_viper)
 {
     struct HID_Mouse_t mouse;
     
-    hidDev.pUdev = &udev;
-    hidDev.hid_type = USBHID_TYPE_MOUSE;
-    hidDev.raw_hid_report_desc = (uint8_t *)RAZER_VIPER_ULTIMATE_1;
-    hidDev.raw_hid_report_desc_len = sizeof(RAZER_VIPER_ULTIMATE_1);
+    gHidDev.pUdev = &gUdev;
+    gHidDev.hid_type = USBHID_TYPE_MOUSE;
+    gHidDev.raw_hid_report_desc = (uint8_t *)RAZER_VIPER_ULTIMATE_1;
+    gHidDev.raw_hid_report_desc_len = sizeof(RAZER_VIPER_ULTIMATE_1);
     
-    int ret = hidMouse_Open(&hidDev, &mouse);
+    int ret = hidMouse_Open(&gHidDev, &mouse);
     
     zassert_equal(ret, USBHID_SUCCESS);
     zassert_equal(mouse.button.count, 5, "Should have 5 buttons");
@@ -706,12 +706,12 @@ ZTEST(hid_mouse, test_open_raspberry_pi)
 {
     struct HID_Mouse_t mouse;
     
-    hidDev.pUdev = &udev;
-    hidDev.hid_type = USBHID_TYPE_MOUSE;
-    hidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
-    hidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
+    gHidDev.pUdev = &gUdev;
+    gHidDev.hid_type = USBHID_TYPE_MOUSE;
+    gHidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
+    gHidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
     
-    int ret = hidMouse_Open(&hidDev, &mouse);
+    int ret = hidMouse_Open(&gHidDev, &mouse);
     
     zassert_equal(ret, USBHID_SUCCESS);
     zassert_equal(mouse.button.count, 3, "Should have 3 buttons");
@@ -730,12 +730,12 @@ ZTEST(hid_mouse, test_open_logitech_g305_with_report_id)
 {
     struct HID_Mouse_t mouse;
     
-    hidDev.pUdev = &udev;
-    hidDev.hid_type = USBHID_TYPE_MOUSE;
-    hidDev.raw_hid_report_desc = (uint8_t *)LOGITECH_G305_2;
-    hidDev.raw_hid_report_desc_len = sizeof(LOGITECH_G305_2);
+    gHidDev.pUdev = &gUdev;
+    gHidDev.hid_type = USBHID_TYPE_MOUSE;
+    gHidDev.raw_hid_report_desc = (uint8_t *)LOGITECH_G305_2;
+    gHidDev.raw_hid_report_desc_len = sizeof(LOGITECH_G305_2);
     
-    int ret = hidMouse_Open(&hidDev, &mouse);
+    int ret = hidMouse_Open(&gHidDev, &mouse);
     
     zassert_equal(ret, USBHID_SUCCESS);
     zassert_equal(mouse.button.count, 16, "Should have 16 buttons");
@@ -753,12 +753,12 @@ ZTEST(hid_mouse, test_button_get_set)
 {
     struct HID_Mouse_t mouse;
     
-    hidDev.pUdev = &udev;
-    hidDev.hid_type = USBHID_TYPE_MOUSE;
-    hidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
-    hidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
+    gHidDev.pUdev = &gUdev;
+    gHidDev.hid_type = USBHID_TYPE_MOUSE;
+    gHidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
+    gHidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
     
-    int ret = hidMouse_Open(&hidDev, &mouse);
+    int ret = hidMouse_Open(&gHidDev, &mouse);
     zassert_equal(ret, USBHID_SUCCESS);
     
     // Set left button
@@ -802,12 +802,12 @@ ZTEST(hid_mouse, test_multiple_buttons)
 {
     struct HID_Mouse_t mouse;
     
-    hidDev.pUdev = &udev;
-    hidDev.hid_type = USBHID_TYPE_MOUSE;
-    hidDev.raw_hid_report_desc = (uint8_t *)ZOWIE_FK2;
-    hidDev.raw_hid_report_desc_len = sizeof(ZOWIE_FK2);
+    gHidDev.pUdev = &gUdev;
+    gHidDev.hid_type = USBHID_TYPE_MOUSE;
+    gHidDev.raw_hid_report_desc = (uint8_t *)ZOWIE_FK2;
+    gHidDev.raw_hid_report_desc_len = sizeof(ZOWIE_FK2);
     
-    int ret = hidMouse_Open(&hidDev, &mouse);
+    int ret = hidMouse_Open(&gHidDev, &mouse);
     zassert_equal(ret, USBHID_SUCCESS);
     
     // Set multiple buttons
@@ -840,12 +840,12 @@ ZTEST(hid_mouse, test_orientation_8bit)
 {
     struct HID_Mouse_t mouse;
     
-    hidDev.pUdev = &udev;
-    hidDev.hid_type = USBHID_TYPE_MOUSE;
-    hidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
-    hidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
+    gHidDev.pUdev = &gUdev;
+    gHidDev.hid_type = USBHID_TYPE_MOUSE;
+    gHidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
+    gHidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
     
-    int ret = hidMouse_Open(&hidDev, &mouse);
+    int ret = hidMouse_Open(&gHidDev, &mouse);
     zassert_equal(ret, USBHID_SUCCESS);
     
     // Set X axis
@@ -877,12 +877,12 @@ ZTEST(hid_mouse, test_orientation_16bit)
 {
     struct HID_Mouse_t mouse;
     
-    hidDev.pUdev = &udev;
-    hidDev.hid_type = USBHID_TYPE_MOUSE;
-    hidDev.raw_hid_report_desc = (uint8_t *)ZOWIE_FK2;
-    hidDev.raw_hid_report_desc_len = sizeof(ZOWIE_FK2);
+    gHidDev.pUdev = &gUdev;
+    gHidDev.hid_type = USBHID_TYPE_MOUSE;
+    gHidDev.raw_hid_report_desc = (uint8_t *)ZOWIE_FK2;
+    gHidDev.raw_hid_report_desc_len = sizeof(ZOWIE_FK2);
     
-    int ret = hidMouse_Open(&hidDev, &mouse);
+    int ret = hidMouse_Open(&gHidDev, &mouse);
     zassert_equal(ret, USBHID_SUCCESS);
     
     // Test large 16-bit values
@@ -911,12 +911,12 @@ ZTEST(hid_mouse, test_combined_button_orientation)
 {
     struct HID_Mouse_t mouse;
     
-    hidDev.pUdev = &udev;
-    hidDev.hid_type = USBHID_TYPE_MOUSE;
-    hidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
-    hidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
+    gHidDev.pUdev = &gUdev;
+    gHidDev.hid_type = USBHID_TYPE_MOUSE;
+    gHidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
+    gHidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
     
-    int ret = hidMouse_Open(&hidDev, &mouse);
+    int ret = hidMouse_Open(&gHidDev, &mouse);
     zassert_equal(ret, USBHID_SUCCESS);
     
     // Set buttons
@@ -959,12 +959,12 @@ ZTEST(hid_mouse, test_invalid_parameters)
     int32_t axisValue = 0;
     int ret;
     
-    hidDev.pUdev = &udev;
-    hidDev.hid_type = USBHID_TYPE_MOUSE;
-    hidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
-    hidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
+    gHidDev.pUdev = &gUdev;
+    gHidDev.hid_type = USBHID_TYPE_MOUSE;
+    gHidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
+    gHidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
     
-    ret = hidMouse_Open(&hidDev, &mouse);
+    ret = hidMouse_Open(&gHidDev, &mouse);
     zassert_equal(ret, USBHID_SUCCESS);
     
     // Test NULL mouse pointer
@@ -1012,12 +1012,12 @@ ZTEST(hid_mouse, test_open_non_mouse_device)
     struct HID_Mouse_t mouse;
     int ret;
     
-    hidDev.pUdev = &udev;
-    hidDev.hid_type = USBHID_TYPE_KEYBOARD;
-    hidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
-    hidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
+    gHidDev.pUdev = &gUdev;
+    gHidDev.hid_type = USBHID_TYPE_KEYBOARD;
+    gHidDev.raw_hid_report_desc = (uint8_t *)RASPBERRY_PI;
+    gHidDev.raw_hid_report_desc_len = sizeof(RASPBERRY_PI);
     
-    ret = hidMouse_Open(&hidDev, &mouse);
+    ret = hidMouse_Open(&gHidDev, &mouse);
     
     zassert_equal(ret, USBHID_NOT_SUPPORT, "Should reject non-mouse device");
 }
