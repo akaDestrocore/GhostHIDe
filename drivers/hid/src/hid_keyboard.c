@@ -298,6 +298,7 @@ static int parse_hid_report(struct HID_Keyboard_t *pKbd, uint8_t *pReport, uint1
     pKey->size = 8;
     // Up to 6 simultaneous keys
     pKey->count = HID_KBD_MAX_KEYS;
+    pKey->report_buf_off = HID_KBD_KEYS_OFFSET;
     
     return 0;
 }
