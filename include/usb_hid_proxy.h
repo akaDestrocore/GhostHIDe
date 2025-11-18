@@ -54,7 +54,7 @@ int usbhid_proxyInit(void);
 /**
  * @brief Send HID report
  */
-int usbhid_proxySendReport(uint8_t *pReport, size_t len);
+int usbhid_proxySendReport(uint8_t ifaceNum, uint8_t *pReport, size_t len);
 
 /**
  * @brief USB disable and reset of globals and semaphopres
