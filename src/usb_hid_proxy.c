@@ -43,15 +43,22 @@ LOG_MODULE_REGISTER(usb_hid_proxy, LOG_LEVEL_INF);
 
 /* Private function prototypes -----------------------------------------------*/
 static void mouse_int_in_ready(const struct device *pDev);
+static void kbd_int_in_ready(const struct device *pDev);
 void usb_status_cb(enum usb_dc_status_code status, const uint8_t *pParam);
 
 /* Private variables ---------------------------------------------------------*/
 static const struct device *pHidDevMouse = NULL;
+static const struct device *pHidDevKbd = NULL;
 static K_SEM_DEFINE(mouseSem, 1, 1);
+static K_SEM_DEFINE(kbdSem, 1, 1);
 static volatile enum usb_dc_status_code gUsbStatus = USB_DC_UNKNOWN;
 static volatile bool isUsbConfigured = false;
-static const struct hid_ops pMouseOps = {
+static const struct hid_ops mouseOps = {
     .int_in_ready = mouse_int_in_ready,
+};
+
+static const struct hid_ops kbdOps = {
+    .int_in_ready = kbd_int_in_ready,
 };
 
 /**
@@ -90,37 +97,80 @@ static const uint8_t hidMouseReportDesc[] = {
     0xC0               // End Collection
 };
 
+static const uint8_t hidKbdReportDesc[] = {
+    0x05, 0x01,        // Usage Page (Generic Desktop)
+    0x09, 0x06,        // Usage (Keyboard)
+    0xA1, 0x01,        // Collection (Application)
+    0x05, 0x07,        //   Usage Page (Key Codes)
+    0x19, 0xE0,        //   Usage Minimum (224)
+    0x29, 0xE7,        //   Usage Maximum (231)
+    0x15, 0x00,        //   Logical Minimum (0)
+    0x25, 0x01,        //   Logical Maximum (1)
+    0x75, 0x01,        //   Report Size (1)
+    0x95, 0x08,        //   Report Count (8)
+    0x81, 0x02,        //   Input (Data, Variable, Absolute)
+    0x95, 0x01,        //   Report Count (1)
+    0x75, 0x08,        //   Report Size (8)
+    0x81, 0x01,        //   Input (Constant)
+    0x95, 0x06,        //   Report Count (6)
+    0x75, 0x08,        //   Report Size (8)
+    0x15, 0x00,        //   Logical Minimum (0)
+    0x25, 0x65,        //   Logical Maximum (101)
+    0x05, 0x07,        //   Usage Page (Key Codes)
+    0x19, 0x00,        //   Usage Minimum (0)
+    0x29, 0x65,        //   Usage Maximum (101)
+    0x81, 0x00,        //   Input (Data, Array)
+    0xC0               // End Collection
+};
+
+/**
+ * @brief Generic HID Keyboard Report Descriptor
+ */
+
 /* --------------------------------------------------------------------------
  * Public API
  * -------------------------------------------------------------------------*/
 
 /**
-  * @brief Initialize the USB HID
+  * @brief Initialize USB HID devices
   * @retval 0 on success, error code otherwise
   */
 int usbhid_proxyInit(void) {
     
     int ret = -1;
 
-    LOG_INF("Initializing USB HID Mouse");
-
     // Reset first
     isUsbConfigured = false;
     gUsbStatus = USB_DC_UNKNOWN;
 
+
+    // Get bindings for both devices
     pHidDevMouse = device_get_binding("HID_0");
     if (NULL == pHidDevMouse) {
         LOG_ERR("HID_0 device not found");
         return -ENODEV;
     }
 
-    // Register descriptor for HID_0
-    usb_hid_register_device(pHidDevMouse, hidMouseReportDesc, sizeof(hidMouseReportDesc), &pMouseOps);
+    pHidDevKbd = device_get_binding("HID_1");
+    if (NULL == pHidDevKbd) {
+        LOG_ERR("HID_1 device not found");
+        return -ENODEV;
+    }
 
+    // Register descriptors
+    usb_hid_register_device(pHidDevMouse, hidMouseReportDesc, sizeof(hidMouseReportDesc), &mouseOps);
     LOG_INF("Mouse descriptor registered (HID_0)");
+    usb_hid_register_device(pHidDevKbd, hidKbdReportDesc, sizeof(hidKbdReportDesc), &kbdOps);
+    LOG_INF("Keyboard descriptor registered (HID_1)");
 
-    // Initialize HID device
+    // Initialize each HID device
     ret = usb_hid_init(pHidDevMouse);
+    if (0 != ret) {
+        LOG_ERR("Failed to initialize HID device: %d", ret);
+        return -ENODEV;
+    }
+
+    ret = usb_hid_init(pHidDevKbd);
     if (0 != ret) {
         LOG_ERR("Failed to initialize HID device: %d", ret);
         return -ENODEV;
@@ -149,14 +199,18 @@ bool usbhid_proxyIsReady(void)
 
 /**
  * @brief Send report ot endpoint
- * @param report pointer to the report descriptor
+ * @param ifaceNum interface number
+ * @param pReport pointer to the report descriptor
+ * @param len size of the report descriptor
  * @return 0 on success, error code otherwise
  */
-int usbhid_proxySendReport(uint8_t *pReport, size_t len) {
+int usbhid_proxySendReport(uint8_t ifaceNum, uint8_t *pReport, size_t len) {
     
     int ret = -1;
-    static uint32_t sendCount = 0;
-    
+    static uint32_t sendCount[2] = {0,0};
+    const struct device *pDev;
+    struct k_sem *semaphore;
+
     if (NULL == pReport || 0 == len) {
         return -EINVAL;
     }
@@ -169,46 +223,50 @@ int usbhid_proxySendReport(uint8_t *pReport, size_t len) {
         return -EAGAIN;
     }
     
-    if (NULL == pHidDevMouse) {
+    if (0 == ifaceNum) {
+        pDev = pHidDevMouse;
+        semaphore = &mouseSem;
+    }
+    else if (1 == ifaceNum) {
+        pDev = pHidDevKbd;
+        semaphore = &kbdSem;
+    } else {
+        return -EINVAL;
+    }
+
+    if (NULL == pDev) {
         return -ENODEV;
     }
     
-    sendCount++;
-    
-    // Log semaphore state
-    if (sendCount % 100 == 0) {
-        LOG_DBG("Mouse send #%" PRIu32 " (sem count=%d)",
-                sendCount, k_sem_count_get(&mouseSem));
-    }
+    sendCount[ifaceNum]++;
     
     // Wait for EP to be ready
-    if (0 != k_sem_take(&mouseSem, K_MSEC(100))) {
-        static uint32_t busyCount = 0;
-        if (++busyCount % 50 == 0) {
-            LOG_WRN("Mouse endpoint busy (%" PRIu32 " times)", busyCount);
+    if (0 != k_sem_take(semaphore, K_MSEC(100))) {
+        static uint32_t busyCount[2] = {0, 0};
+        if (++busyCount[ifaceNum] % 50 == 0) {
+            LOG_WRN("Interface %d: Semaphore busy (%" PRIu32 " times)", ifaceNum, busyCount[ifaceNum]);
         }
         return -EBUSY;
     }
     
     // Write report
-    ret = hid_int_ep_write(pHidDevMouse, pReport, len, NULL);
+    ret = hid_int_ep_write(pDev, pReport, len, NULL);
     
     if (0 != ret) {
         // Give semaphore back on failure
-        k_sem_give(&mouseSem);
+        k_sem_give(semaphore);
         
-        static uint32_t write_fail_count = 0;
-        if (++write_fail_count % 50 == 0) {
-            LOG_ERR("Mouse write failed %" PRIu32 " times (last ret=%d)",
-                    write_fail_count, ret);
+        static uint32_t writeFailCount[2] = {0, 0};
+        if (++writeFailCount[ifaceNum] % 50 == 0) {
+            LOG_ERR("Interface %d: Write failed %" PRIu32 " times (last ret=%d)", ifaceNum, writeFailCount[ifaceNum], ret);
         }
         
         return ret;
     }
     
     // Sample successful sends
-    if (sendCount % 100 == 0) {
-        LOG_DBG("Mouse send #%" PRIu32 " successful", sendCount);
+    if (sendCount[ifaceNum] % 100 == 0) {
+        LOG_DBG("Interface %d: Send #%" PRIu32 " successful", ifaceNum, sendCount[ifaceNum]);
     }
     
     return 0;
@@ -223,10 +281,13 @@ void usbhid_proxyCleanup(void) {
     usb_disable();
     isUsbConfigured = false;
     pHidDevMouse = NULL;
+    pHidDevKbd = NULL;
     
     // Reset semaphore
     k_sem_reset(&mouseSem);
     k_sem_give(&mouseSem);
+    k_sem_reset(&kbdSem);
+    k_sem_give(&kbdSem);
 }
 
 /* --------------------------------------------------------------------------
@@ -234,14 +295,21 @@ void usbhid_proxyCleanup(void) {
  * -------------------------------------------------------------------------*/
 static void mouse_int_in_ready(const struct device *pDev) {
     
-    ARG_UNUSED(pDev);
+    (void)(pDev);
     k_sem_give(&mouseSem);
     LOG_DBG("Mouse endpoint ready");
 }
 
+static void kbd_int_in_ready(const struct device *pDev) {
+    
+    (void)(pDev);
+    k_sem_give(&kbdSem);
+    LOG_DBG("Keyboard endpoint ready");
+}
+
 void usb_status_cb(enum usb_dc_status_code status, const uint8_t *pParam) {
     
-    ARG_UNUSED(pParam);
+    (void)(pParam);
     gUsbStatus = status;
     
     LOG_INF("USB Status Change: 0x%02X", status);
