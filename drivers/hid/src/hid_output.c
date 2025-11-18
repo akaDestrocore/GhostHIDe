@@ -155,7 +155,7 @@ int hidOutput_sendMouseReport(struct HID_Mouse_t *pMouse) {
         return ret;
     }
 
-    ret = usbhid_proxySendReport(pReportBuff, HID_OUTPUT_REPORT_SIZE);
+    ret = usbhid_proxySendReport(0, pReportBuff, HID_OUTPUT_REPORT_SIZE);
     if (USBHID_SUCCESS != ret) {
         return ret;
     }
