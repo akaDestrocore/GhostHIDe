@@ -527,7 +527,19 @@ static int parse_hid_report(struct HID_Mouse_t *pMouse, uint8_t *pReport, uint16
                         
                         if (true == foundButtons && true == foundOrientation) {
                             LOG_INF("All required fields found, stopping parse");
-                            goto parse_done;
+                            if (true != foundButtons || true != foundOrientation) {
+                                LOG_ERR("Failed to parse mouse fields: buttons=%d orientation=%d", foundButtons, foundOrientation);
+                                return -1;
+                            }
+
+                            pMouse->report_len = (reportOffset + 7) / 8;
+                            pMouse->has_report_id_declared = hasReportId;
+                            
+                            if (true == foundWheel) {
+                                LOG_INF("  Wheel at byte %d", pWheel->report_buf_off);
+                            }
+
+                            return 0;
                         }
                     }
                 }
@@ -614,10 +626,6 @@ static int parse_hid_report(struct HID_Mouse_t *pMouse, uint8_t *pReport, uint16
         }
     }
 
-    LOG_INF("Parse complete: buttons=%d orientation=%d total_bits=%d", 
-            foundButtons, foundOrientation, reportOffset);
-
-parse_done:
     if (true != foundButtons || true != foundOrientation) {
         LOG_ERR("Failed to parse mouse fields: buttons=%d orientation=%d", 
                 foundButtons, foundOrientation);
