@@ -45,11 +45,10 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 #define ENUMERATION_WAIT_TIMEOUT_MS 10000
 
 /* Type Deffinitions ---------------------------------------------------------*/
-typedef struct
-{
+typedef struct {
+    
     const char *name;
     struct gpio_dt_spec intGpio;
-    const struct device *usartDev;
 
     struct ch375_Context_t *ch375Ctx;
     struct USB_Device_t usbDev;
@@ -64,6 +63,7 @@ typedef struct
 
     uint32_t lastReportTimestampMs;
     uint32_t reportIntervalMs;
+    
 } DeviceInput_t;
 
 /* Private variables ---------------------------------------------------------*/
@@ -226,8 +226,8 @@ static int initCh375Device(DeviceInput_t *pDevIn, const char *pName, int usartIn
  * @param pDevIn Device input structure
  * @return 0 on success, negative error code otherwise
  */
-static int openDeviceInput(DeviceInput_t *pDevIn)
-{
+static int openDeviceInput(DeviceInput_t *pDevIn) {
+    
     int ret = -1;
 
     LOG_INF("%s: Opening USB device...", pDevIn->name);
@@ -284,8 +284,8 @@ static int openDeviceInput(DeviceInput_t *pDevIn)
  * @brief Wait for all configured USB devices to connect
  * @note Blocks until all devices are connected
  */
-static void waitAllDevicesConnect(void)
-{
+static void waitAllDevicesConnect(void) {
+    
     int ret = -1;
     bool allConnected = false;
 
@@ -327,8 +327,8 @@ static void waitAllDevicesConnect(void)
  * @brief Enumerate all connected USB devices
  * @return 0 on success, negative error code on failure
  */
-static int openAllDeviceInputs(void)
-{
+static int openAllDeviceInputs(void) {
+    
     int ret = -1;
 
     for (int i = 0; i < CH375_MODULE_COUNT; i++) {
@@ -347,8 +347,8 @@ static int openAllDeviceInputs(void)
  * @brief Main HID input forwarding loop
  * @note Runs until device disconnection is detected
  */
-static void loopHandleDevices(void)
-{
+static void loopHandleDevices(void) {
+    
     int ret = -1;
 
     LOG_INF("HID processing loop started");
@@ -389,9 +389,9 @@ static void loopHandleDevices(void)
  * @param pDevIn Device input structure
  * @return 0 on success, USBHID_NO_DEV on disconnection, negative on error
  */
-static int handleMouseInput(DeviceInput_t *pDevIn)
-{
-    int ret= -1;
+static int handleMouseInput(DeviceInput_t *pDevIn) {
+    
+    int ret = -1;
 
     // Fetch new report from device
     ret = hidMouse_FetchReport(&pDevIn->mouse);
@@ -419,43 +419,17 @@ static int handleMouseInput(DeviceInput_t *pDevIn)
  * @param pDevIn Device input structure
  * @return 0 on success, USBHID_NO_DEV on disconnection, negative on error
  */
-static int handleKeyboardInput(DeviceInput_t *pDevIn)
-{
+static int handleKeyboardInput(DeviceInput_t *pDevIn) {
+    
     int ret = -1;
     struct USBHID_Device_t *pHidDev;
     uint8_t *pReportBuff;
     size_t reportLen;
 
-    static uint8_t lastKeyboardReport[8] = {0};
     static uint8_t lastSentReport[8] = {0};
-    static uint32_t lastSendTimestampMs = 0;
-
-    uint32_t currentTimeMs;
-    bool areKeysPressed;
 
     pHidDev = pDevIn->keyboard.hid_dev;
     reportLen = pHidDev ? pHidDev->report_len : 0;
-    currentTimeMs = k_uptime_get_32();
-    areKeysPressed = false;
-
-    // Check if any keys are currently pressed in last sent report
-    for (int i = 0; i < reportLen; i++) {
-        if (lastSentReport[i] != 0) {
-            areKeysPressed = true;
-            break;
-        }
-    }
-
-    // Send break report if keys were pressed and timeout expired
-    if (areKeysPressed && (currentTimeMs - lastSendTimestampMs) >= KEYBOARD_BREAK_TIMEOUT_MS) {
-        static uint8_t breakReport[8] = {0};
-        
-        ret = usbhid_proxySendReport(pDevIn->interfaceNum, breakReport, reportLen);
-        if (0 == ret) {
-            memset(lastSentReport, 0, sizeof(lastSentReport));
-            lastSendTimestampMs = currentTimeMs;
-        }
-    }
 
     // Fetch new report
     ret = hidKeyboard_FetchReport(&pDevIn->keyboard);
@@ -476,19 +450,16 @@ static int handleKeyboardInput(DeviceInput_t *pDevIn)
     }
 
     // Skip if no chnages
-    if (memcmp(pReportBuff, lastKeyboardReport, reportLen) == 0) {
+    if (memcmp(pReportBuff, lastSentReport, reportLen) == 0) {
         return 0;
     }
 
-    memcpy(lastKeyboardReport, pReportBuff, reportLen);
+    memcpy(lastSentReport, pReportBuff, reportLen);
 
     // Forward to USB output
     ret = usbhid_proxySendReport(pDevIn->interfaceNum, pReportBuff, reportLen);
 
-    if (0 == ret) {
-        memcpy(lastSentReport, pReportBuff, reportLen);
-        lastSendTimestampMs = currentTimeMs;
-    }  else {
+    if (0 != ret) {
         LOG_ERR("Keyboard send failed: %d", ret);
     }
 
@@ -498,8 +469,8 @@ static int handleKeyboardInput(DeviceInput_t *pDevIn)
 /**
  * @brief Close all open USB devices and free resources
  */
-static void closeAllDevices(void)
-{
+static void closeAllDevices(void) {
+    
     for (int i = 0; i < CH375_MODULE_COUNT; i++) {
         DeviceInput_t *pDevIn = &gDeviceInputs[i];
 
