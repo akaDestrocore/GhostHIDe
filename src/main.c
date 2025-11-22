@@ -34,6 +34,7 @@
 #include "usb_hid_proxy.h"
 #include "hid_output.h"
 #include "hid_keyboard.h"
+#include "input_patterns.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
@@ -68,6 +69,9 @@ typedef struct {
 
 /* Private variables ---------------------------------------------------------*/
 static DeviceInput_t gDeviceInputs[CH375_MODULE_COUNT];
+static struct RecoilComp_Context_t *gRecoilCompCtx = NULL;
+static bool gRcEnabled;
+static bool gRcActive;
 
 static const char banner[] = 
 "                                                                      \n"
@@ -88,6 +92,7 @@ static void loopHandleDevices(void);
 static int handleMouseInput(DeviceInput_t *pDevIn);
 static int handleKeyboardInput(DeviceInput_t *pDevIn);
 static void closeAllDevices(void);
+static int initInputPatterns(void);
 
 /**
   * @brief  The application entry point.
@@ -144,10 +149,20 @@ int main(void)
             continue;
         }
 
+        LOG_INF("Initializing recoil compensation patterns...");
+        ret = initInputPatterns();
+        if (ret < 0) {
+            LOG_ERR("[ FAILED ] Pattern init failed: %d", ret);
+            k_msleep(1000);
+            continue;
+        }
+
         LOG_INF("Initializing USB device output...");
         ret = usbhid_proxyInit();
         if (USBHID_SUCCESS != ret) {
             LOG_ERR("[ FAILED ] USB HID proxy initialization failed: %d", ret);
+            recoilComp_close(gRecoilCompCtx);
+            gRecoilCompCtx = NULL;
             k_msleep(1000);
             continue;
         }
@@ -163,6 +178,8 @@ int main(void)
             LOG_ERR("USB enumeration timeout");
             usbhid_proxyCleanup();
             closeAllDevices();
+            recoilComp_close(gRecoilCompCtx);
+            gRecoilCompCtx = NULL;
             k_msleep(1000);
             continue;
         }
@@ -172,6 +189,8 @@ int main(void)
 
         LOG_WRN("Device disconnected, restarting...");
         usbhid_proxyCleanup();
+        recoilComp_close(gRecoilCompCtx);
+        gRecoilCompCtx = NULL;
         closeAllDevices();
         k_msleep(1000);
     }
@@ -392,6 +411,8 @@ static void loopHandleDevices(void) {
 static int handleMouseInput(DeviceInput_t *pDevIn) {
     
     int ret = -1;
+    uint32_t buttonVal = 0;
+    bool needSend = false;
 
     // Fetch new report from device
     ret = hidMouse_FetchReport(&pDevIn->mouse);
@@ -400,15 +421,63 @@ static int handleMouseInput(DeviceInput_t *pDevIn) {
         return ret;
     }
 
-    // No new data
-    if (USBHID_SUCCESS != ret) {
-        return 0;
+    // Check LMB state
+    hidMouse_GetButton(&pDevIn->mouse, HID_MOUSE_BUTTON_LEFT, &buttonVal, false);
+    if (0 != buttonVal) {
+        // Start/continue compensation if pressed
+        if  (true != gRcActive) {
+            gRcActive = true;
+            recoilComp_restart(gRecoilCompCtx);
+            LOG_INF("[ OK ] Recoil compensation ENABLED.");
+        }
+
+        // Get compensaton if ready
+        if (true == gRcEnabled) {
+            struct PatternCompensation_t compData;
+            ret = recoilComp_getNextData(gRecoilCompCtx, &compData);
+
+            if (0 == ret) {
+                int32_t mouseX;
+                int32_t mouseY;
+                int32_t finalX;
+                int32_t finalY;
+
+                // Get actual mouse movement
+                hidMouse_GetOrientation(&pDevIn->mouse, HID_MOUSE_AXIS_X, &mouseX, false);
+                hidMouse_GetOrientation(&pDevIn->mouse, HID_MOUSE_AXIS_Y, &mouseY, false);
+
+                finalX = mouseX + compData.x;
+                finalY = mouseY + compData.y;
+
+                // Apply compensation
+                hidMouse_SetOrientation(&pDevIn->mouse, HID_MOUSE_AXIS_X, finalX, false);
+                hidMouse_SetOrientation(&pDevIn->mouse, HID_MOUSE_AXIS_Y, finalY, false);
+
+                needSend = true;
+            } else {
+                // Just forward mouse data
+                needSend = (USBHID_SUCCESS == hidMouse_FetchReport(&pDevIn->mouse)) ? true : false;
+            }
+        } else {
+            // Compensation disabled - just forward as is
+            needSend = (USBHID_SUCCESS == ret) ? true : false;
+        }
+    } else {
+        // LMB released
+        if ( true == gRcActive) {
+            gRcActive = false;
+            LOG_INF("[ OK ] Recoil compensation DISABLED");
+        }
+
+        needSend = (USBHID_SUCCESS == ret) ? true : false;
     }
 
-    // Forward report to USB output
-    ret = hidOutput_sendMouseReport(&pDevIn->mouse);
-    if (0 != ret) {
-        LOG_WRN("%s: Failed to send report: %d", pDevIn->name, ret);
+    // Send report if we have data
+    if (true == needSend) {
+        ret = hidOutput_sendMouseReport(&pDevIn->mouse);
+        if (USBHID_SUCCESS != ret) {
+            LOG_WRN("%s: Failed to send report: %d", pDevIn->name, ret);
+        }
     }
 
     return 0;
@@ -425,8 +494,10 @@ static int handleKeyboardInput(DeviceInput_t *pDevIn) {
     struct USBHID_Device_t *pHidDev;
     uint8_t *pReportBuff;
     size_t reportLen;
+    uint32_t value;
 
     static uint8_t lastSentReport[8] = {0};
+    static uint8_t lastKeyboardReport[8] = {0};
 
     pHidDev = pDevIn->keyboard.hid_dev;
     reportLen = pHidDev ? pHidDev->report_len : 0;
@@ -450,16 +521,39 @@ static int handleKeyboardInput(DeviceInput_t *pDevIn) {
     }
 
     // Skip if no chnages
-    if (memcmp(pReportBuff, lastSentReport, reportLen) == 0) {
+    if (memcmp(pReportBuff, lastKeyboardReport, reportLen) == 0) {
         return 0;
     }
 
-    memcpy(lastSentReport, pReportBuff, reportLen);
+    memcpy(lastKeyboardReport, pReportBuff, reportLen);
+
+    // Process ctrl keys
+    hidKeyboard_GetKey(&pDevIn->keyboard, HID_KEY_PAGEUP, &value, false);
+    if (0 != value) {
+        gRcEnabled = true;
+        LOG_INF("Recoil compensation profile ACTIVATED");
+    }
+
+    hidKeyboard_GetKey(&pDevIn->keyboard, HID_KEY_PAGEDOWN, &value, false);
+    if (0 != value) {
+        gRcEnabled = false;
+        LOG_INF("Recoil compensation profile DEACTIVATED");
+    }
+
+    hidKeyboard_GetKey(&pDevIn->keyboard, HID_KBD_NUMBER('1'), &value, false);
+    if (0 != value) {
+        int res = recoilComp_setPreset(gRecoilCompCtx, 0); // TODO: change to enum after adding new profiles
+        if (0 == res) {
+            LOG_INF("[ OK ] Selected: SOLDIER 76");
+        }
+    }
 
     // Forward to USB output
     ret = usbhid_proxySendReport(pDevIn->interfaceNum, pReportBuff, reportLen);
 
-    if (0 != ret) {
+    if (0 == ret) {
+        memcpy(lastSentReport, pReportBuff, reportLen);
+    } else {
         LOG_ERR("Keyboard send failed: %d", ret);
     }
 
@@ -472,7 +566,7 @@ static int handleKeyboardInput(DeviceInput_t *pDevIn) {
 static void closeAllDevices(void) {
     
     for (int i = 0; i < CH375_MODULE_COUNT; i++) {
-        DeviceInput_t *pDevIn = &gDeviceInputs[i];
+        DeviceInput_t* pDevIn = &gDeviceInputs[i];
 
         if (USBHID_TYPE_MOUSE == pDevIn->hidDev.hid_type) {
             hidMouse_Close(&pDevIn->mouse);
@@ -487,4 +581,23 @@ static void closeAllDevices(void) {
 
         pDevIn->isConnected = false;
     }
+}
+
+/**
+ * @brief Initialize Recoil Compensation
+ * @return 0 on success, negative error code otherwise
+ */
+static int initInputPatterns(void) {
+    
+    int ret = recoilComp_open(&gRecoilCompCtx);
+    if (ret < 0) {
+        LOG_ERR("[ FAILED ] Failed to open compensation pattern context: %d", ret);
+        return ret;
+    }
+
+    gRcEnabled = false;
+    gRcActive = false;
+
+    LOG_INF("[ OK ] Recoil compensation pattern initialized");
+    return 0;
 }

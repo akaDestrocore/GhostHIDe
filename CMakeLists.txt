@@ -14,6 +14,7 @@ target_sources(app PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/usb_hid_proxy.c
     ${CMAKE_CURRENT_SOURCE_DIR}/drivers/hid/src/hid_output.c
     ${CMAKE_CURRENT_SOURCE_DIR}/drivers/hid/src/hid_keyboard.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/input_patterns.c
 )
 
 # Add include dirs
