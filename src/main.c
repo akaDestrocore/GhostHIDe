@@ -542,10 +542,40 @@ static int handleKeyboardInput(DeviceInput_t *pDevIn) {
 
     hidKeyboard_GetKey(&pDevIn->keyboard, HID_KBD_NUMBER('1'), &value, false);
     if (0 != value) {
-        int res = recoilComp_setPreset(gRecoilCompCtx, 0); // TODO: change to enum after adding new profiles
+        int res = recoilComp_setPreset(gRecoilCompCtx, TEMPLATE_OW2_SOLDIER76);
         if (0 == res) {
             LOG_INF("[ OK ] Selected: SOLDIER 76");
         }
+    }
+
+    hidKeyboard_GetKey(&pDevIn->keyboard, HID_KBD_NUMBER('2'), &value, false);
+    if (0 != value) {
+        int res = recoilComp_setPreset(gRecoilCompCtx, TEMPLATE_OW2_CASSIDY);
+        if (0 == res) {
+            LOG_INF("[ OK ] Selected: CASSIDY");
+        }
+    }
+
+    // Coefficient adjustment
+    hidKeyboard_GetKey(&pDevIn->keyboard, HID_KEY_EQUAL, &value, false);
+    if (0 != value) {
+        recoilComp_changeCoefficient(gRecoilCompCtx, true);
+    }
+
+    hidKeyboard_GetKey(&pDevIn->keyboard, HID_KEY_MINUS, &value, false);
+    if (0 != value) {
+        recoilComp_changeCoefficient(gRecoilCompCtx, false);
+    }
+
+    // Sensitivity adjustment
+    hidKeyboard_GetKey(&pDevIn->keyboard, HID_KEY_COMMA, &value, false);
+    if (0 != value) {
+        recoilComp_changeSensitivity(gRecoilCompCtx, true);
+    }
+
+    hidKeyboard_GetKey(&pDevIn->keyboard, HID_KEY_DOT, &value, false);
+    if (0 != value) {
+        recoilComp_changeSensitivity(gRecoilCompCtx, false);
     }
 
     // Forward to USB output

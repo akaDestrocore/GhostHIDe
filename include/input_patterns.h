@@ -36,8 +36,9 @@ extern "C" {
 #include <string.h>
 
 /* Macros -------------------------------------------------------------------*/
+#define USB_REPORT_INTERVAL             8
 #define RECOIL_COMP_DEFAULT_COEFF       1.0f
-#define RECOIL_COMP_DEFAULT_SENS        1.0f
+#define RECOIL_COMP_DEFAULT_SENS        2.5f
 #define RECOIL_COMP_COEFF_MIN           0.1f
 #define RECOIL_COMP_COEFF_MAX           10.0f
 #define RECOIL_COMP_PRESET_COUNT        3
@@ -54,7 +55,7 @@ extern "C" {
 typedef enum {
     TEMPLATE_NONE,
     TEMPLATE_OW2_SOLDIER76,
-    TEMPLATE_OW2_SOJOURN
+    TEMPLATE_OW2_CASSIDY
 } PatternPreset_e;
 
 /**
@@ -130,6 +131,16 @@ int recoilComp_getNextData(struct RecoilComp_Context_t* pCtx, struct PatternComp
  * @brief Set current preset and load compensation profile
  */
 int recoilComp_setPreset(struct RecoilComp_Context_t* pCtx, uint32_t presetIndex);
+
+/**
+ * @brief Adjust compensation strength
+ */
+int recoilComp_changeCoefficient(struct RecoilComp_Context_t* pCtx, bool isAdd);
+
+/**
+ * @brief Adjust compensation sensitivity
+ */
+int recoilComp_changeSensitivity(struct RecoilComp_Context_t* pCtx, bool isAdd);
 
 #ifdef __cplusplus
 }

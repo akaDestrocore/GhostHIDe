@@ -30,44 +30,80 @@ LOG_MODULE_REGISTER(input_patterns, LOG_LEVEL_INF);
  * {x_offset, y_offset, time_ms}
  */
 static const float gRawPreset_OW2_Soldier76[] = {
-    0, 0, 111,
-    0, -3, 111,
-    0, 1, 111,
-    0, -3, 111,
-    0, 1, 111,
-    0, -3, 111,
-    0, 1, 111,
-    0, -3, 111,
-    0, 1, 111,
-    0, -3, 111,
-    0, 1, 111,
-    0, 0, 111,
-    0, 1, 111,
-    0, 0, 111,
-    0, 1, 111,
-    0, 0, 111,
-    0, 1, 111,
-    0, 0, 111,
-    0, 1, 111,
-    0, 0, 111,
-    0, 1, 111,
-    0, 0, 111,
-    0, 1, 111,
-    0, 0, 111,
-    0, 1, 111,
-    0, 0, 111,
-    0, 1, 111,
-    0, 0, 111,
-    0, 1, 111,
-    0, 0, 111,
+    +0.00000, +0.00000, 111,
+    +0.00000, -1.45500, 111,
+    +0.00000, +0.47045, 111,
+    +0.00000, -1.36901, 111,
+    +0.00000, +0.44265, 111,
+    +0.00000, -0.85873, 111,
+    +0.00000, +0.41649, 111,
+    +0.00000, -0.80798, 111,
+    +0.00000, +0.39187, 111,
+    +0.00000, -0.38012, 111,
+    +0.00000, +0.36871, 111,
+    +0.00000, -0.35765, 111,
+    +0.00000, +0.34692, 111,
+    +0.00000, -0.33651, 111,
+    +0.00000, +0.32642, 111,
+    +0.00000, -0.18998, 111,
+    +0.00000, +0.18428, 111,
+    +0.00000, +0.00000, 111,
+    +0.00000, +0.17339, 111,
+    +0.00000, +0.00000, 111,
+    +0.00000, +0.00000, 111,
+    +0.00000, +0.00000, 111,
+    +0.00000, +0.00000, 111,
+    +0.00000, +0.00000, 111,
+    +0.00000, +0.00000, 111,
+    +0.00000, +0.00000, 111,
+    +0.00000, +0.00000, 111,
+    +0.00000, +0.00000, 111,
+    +0.00000, +0.00000, 111,
+    +0.00000, +0.00000, 111,
+};
+
+/**
+ * @brief Cassidy preset recoil pattern
+ */
+static const float gRawPreset_OW2_Cassidy[] = {
+    +0.00000, +0.00000, 50,
+    +0.00000, -20.20000, 150,
+    +0.00000, +0.00000, 300,
+    +0.00000, +0.00000, 50,
+    +0.00000, -20.20000, 150,
+    +0.00000, +0.00000, 300,
+    +0.00000, +0.00000, 50,
+    +0.00000, -20.20000, 150,
+    +0.00000, +0.00000, 300,
+    +0.00000, +0.00000, 50,
+    +0.00000, -20.20000, 150,
+    +0.00000, +0.00000, 300,
+    +0.00000, +0.00000, 50,
+    +0.00000, -20.20000, 150,
+    +0.00000, +0.00000, 300,
+    +0.00000, +0.00000, 50,
+    +0.00000, -20.20000, 150,
+    +0.00000, +0.00000, 300,
 };
 
 static const PresetCollection_t sRecoilCollectArr[RECOIL_COMP_PRESET_COUNT] = {
     
     {
+        .pData = NULL,
+        .dataLen = 0,
+        .firerounds_sampling = 0,
+    },
+
+    {
         .pData = gRawPreset_OW2_Soldier76,
         .dataLen = ARRAY_SIZE(gRawPreset_OW2_Soldier76),
-        .firerounds_sampling = 4,
+        .firerounds_sampling = round(111/USB_REPORT_INTERVAL),
+    },
+
+    {
+        .pData = gRawPreset_OW2_Cassidy,
+        .dataLen = ARRAY_SIZE(gRawPreset_OW2_Cassidy),
+        .firerounds_sampling = round(500/USB_REPORT_INTERVAL),
     },
 };
 
@@ -261,6 +297,82 @@ int recoilComp_setPreset(struct RecoilComp_Context_t* pCtx, uint32_t presetIndex
     k_mutex_unlock(&pCtx->lock);
 
     LOG_INF("Preset active: %u", presetIndex);
+    return 0;
+}
+
+/**
+ * @brief Adjust compensation coefficient
+ * @param pCtx Pointer to context
+ * @param isAdd true to increase, false to decrease
+ * @return 0 on success, error code otherwise
+ */
+int recoilComp_changeCoefficient(struct RecoilComp_Context_t* pCtx, bool isAdd) {
+    
+    if (NULL == pCtx) {
+        return -EINVAL;
+    }
+
+    k_mutex_lock(&pCtx->lock, K_FOREVER);
+
+    if (0 == (pCtx->stateFlags & RECOIL_COMP_STATE_INITIALIZED)) {
+        k_mutex_unlock(&pCtx->lock);
+        return -EINVAL;
+    }
+
+    pCtx->coefficient = CLAMP(pCtx->coefficient + (isAdd ? RECOIL_COMP_COEFF_STEP : -RECOIL_COMP_COEFF_STEP), 
+                                                                RECOIL_COMP_COEFF_MIN, RECOIL_COMP_COEFF_MAX);
+
+    if (pCtx->stateFlags & RECOIL_COMP_STATE_PRESET_ACTIVE) {
+        recoilComp_cbFreeLocked(pCtx);
+        int ret = recoilComp_cbGenerateDataLocked(pCtx);
+        if (ret < 0) {
+            LOG_ERR("Failed to regenerate compensation data: %d", ret);
+        } else {
+            LOG_INF("Compensation data regenerated successfully");
+        }
+    }
+
+    LOG_INF("Coefficient: %.2f", (double)pCtx->coefficient);
+    k_mutex_unlock(&pCtx->lock);
+
+    return 0;
+}
+
+/**
+ * @brief Adjust compensation sensitivity
+ * @param pCtx Pointer to context
+ * @param isAdd true to increase, false to decrease
+ * @return 0 on success, negative error code otherwise
+ */
+int recoilComp_changeSensitivity(struct RecoilComp_Context_t* pCtx, bool isAdd) {
+
+    if (NULL == pCtx) {
+        return -EINVAL;
+    }
+
+    k_mutex_lock(&pCtx->lock, K_FOREVER);
+
+    if (0 == (pCtx->stateFlags & RECOIL_COMP_STATE_INITIALIZED)) {
+        k_mutex_unlock(&pCtx->lock);
+        return -EINVAL;
+    }
+
+    pCtx->sensitivity = CLAMP( pCtx->sensitivity + (isAdd ? RECOIL_COMP_SENS_STEP : -RECOIL_COMP_SENS_STEP), 
+                                                                RECOIL_COMP_SENS_MIN, RECOIL_COMP_SENS_MAX);
+
+    if (pCtx->stateFlags & RECOIL_COMP_STATE_PRESET_ACTIVE) {
+        recoilComp_cbFreeLocked(pCtx);
+        int ret = recoilComp_cbGenerateDataLocked(pCtx);
+        if (ret < 0) {
+            LOG_ERR("Failed to regenerate compensation data: %d", ret);
+        } else {
+            LOG_INF("Compensation data regenerated successfully");
+        }
+    }
+
+    LOG_INF("Sensitivity: %.2f", (double)pCtx->sensitivity);
+    k_mutex_unlock(&pCtx->lock);
+    
     return 0;
 }
 
