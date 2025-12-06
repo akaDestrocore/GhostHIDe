@@ -132,7 +132,24 @@ int ch375_hwInitManual(const char *name, int usart_index, const struct gpio_dt_s
 
     if(NULL != int_gpio) {
         hw->int_gpio = *int_gpio;
+        
+        // Configure INT GPIO
+        if (true != device_is_ready(int_gpio->port)) {
+            LOG_ERR("%s: INT GPIO not ready", name);
+            k_free(hw);
+            return -ENODEV;
+        }
+
+        ret = gpio_pin_configure_dt(int_gpio, GPIO_INPUT);
+        if (ret < 0) {
+            LOG_ERR("%s: Failed to configure INT GPIO: %d", name, ret);
+            k_free(hw);
+            return ret;
+        }
+        
+        LOG_INF("%s: INT pin configured", name);
     } else {
+        LOG_INF("%s: No INT pin - using polling mode", name);
         memset(&hw->int_gpio, 0x00, sizeof(hw->int_gpio));
     }
 
@@ -670,17 +687,18 @@ static int ch375_read_data_cb(struct ch375_Context_t *pCtx, uint8_t *pData)
     return CH375_SUCCESS;
 }
 
-static int ch375_query_int_cb(struct ch375_Context_t *pCtx)
-{
+static int ch375_query_int_cb(struct ch375_Context_t *pCtx) {
     ch375_HwContext_t *hw = (ch375_HwContext_t *)ch375_getPriv(pCtx);
 
     if (NULL == hw) {
         return 0;
     }
 
-    if (true != device_is_ready(hw->int_gpio.port)) {
+    // If INT not configured return 0 - ch375_waitInt will fall back to polling
+    if (NULL == hw->int_gpio.port || true != device_is_ready(hw->int_gpio.port)) {
         return 0;
     }
 
-    return gpio_pin_get_dt(&hw->int_gpio) == 0 ? 1 : 0;
+    int pinState = gpio_pin_get_dt(&hw->int_gpio);
+    return (pinState == 0) ? 1 : 0;
 }

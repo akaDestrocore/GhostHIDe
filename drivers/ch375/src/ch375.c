@@ -419,22 +419,73 @@ int ch375_queryInt(struct ch375_Context_t *pCtx) {
   * @retval 0 on success, timeout error otherwise
   */
 int ch375_waitInt(struct ch375_Context_t *pCtx, uint32_t timeout_ms) {
-
-	if ( NULL == pCtx ) {
-		LOG_ERR("Invalid context!");
-		return CH375_PARAM_INVALID;
-	}
-
-	uint32_t start = k_uptime_get_32();
+    
+	int ret = -1;
+    uint32_t start = k_uptime_get_32();
+    uint32_t lastLog = start;
+    uint32_t pollCount = 0;
+    uint8_t status = 0xFF;
+    uint8_t lastStatus = 0xFF;
 	
-	while((k_uptime_get_32()-start) < timeout_ms) {
-		if (0 != ch375_queryInt(pCtx)) {
-			return CH375_SUCCESS;
-		}
-		k_msleep(1);
-	}
+	if ( NULL == pCtx ) {
+        LOG_ERR("Invalid context!");
+        return CH375_PARAM_INVALID;
+    }
+    
+    // Initial status read
+    ret = ch375_getStatus(pCtx, &status);
+    if ( CH375_SUCCESS == ret ) {
+        lastStatus = status;
+        
+        // Check if already completed
+        if (status == CH375_USB_INT_SUCCESS || status == CH375_USB_INT_CONNECT ||
+        	status == CH375_USB_INT_DISCONNECT || status == CH375_USB_INT_USB_READY || status == CH375_PID2STATUS(USB_PID_NAK) ||
+            status == CH375_PID2STATUS(USB_PID_STALL) || status == CH375_PID2STATUS(USB_PID_ACK)) {
+            
+            return CH375_SUCCESS;
+        }
+    }
+    
+    // Poll status register until operation completes or timeout
+    while ((k_uptime_get_32() - start) < timeout_ms) {
+        
+		pollCount++;
+        ret = ch375_getStatus(pCtx, &status);
+        
+        if (CH375_SUCCESS == ret) {
+            // Operation likely complete
+            if (status != lastStatus) {
+                lastStatus = status;
+            }
+            
+            // Check for completion status codes
+            if (status == CH375_USB_INT_SUCCESS || status == CH375_USB_INT_CONNECT ||
+                status == CH375_USB_INT_DISCONNECT ||
+                status == CH375_USB_INT_USB_READY || status == CH375_PID2STATUS(USB_PID_NAK) ||
+                status == CH375_PID2STATUS(USB_PID_STALL) || status == CH375_PID2STATUS(USB_PID_ACK)) {
+                
+				return CH375_SUCCESS;
+            }
+        }
+        
+        // Adaptive polling interval
+        if (pollCount < 100) {
+			// 500 us for first 50 ms
+            k_busy_wait(500);
+        } else if (pollCount < 1000) {
+			// 1 ms up to 1 sec
+            k_busy_wait(1000);
+        } else {
+			// 2 ms after 1 sec
+            k_msleep(2);
+        }
+    }
 
-	return CH375_TIMEOUT;
+    // Timeout
+    ret = ch375_getStatus(pCtx, &status);
+    LOG_ERR("Polling timeout after %u ms (%u polls, final_status=0x%02X, ret=%d)", timeout_ms, pollCount, status, ret);
+    
+    return CH375_TIMEOUT;
 }
 
 /* --------------------------------------------------------------------------

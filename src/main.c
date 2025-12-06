@@ -102,37 +102,16 @@ int main(void)
 {
     int ret = -1;
 
-    // GPIO for MOUSE INT -> PC13
-    static const struct gpio_dt_spec ch375aIntGpio = {
-        .port = DEVICE_DT_GET(DT_NODELABEL(gpioc)),
-        .pin = 13,
-        .dt_flags = GPIO_ACTIVE_LOW
-    };
-
-    // GPIO for KEYBOARD INT -> PC14
-    static const struct gpio_dt_spec ch375bIntGpio = {
-        .port = DEVICE_DT_GET(DT_NODELABEL(gpioc)),
-        .pin = 14,
-        .dt_flags = GPIO_ACTIVE_LOW
-    };
-
     // Print banner
     printk("%s%s%s", "\x1b[36m", banner, "\x1b[0m");
 
-    // Initialize GPIOC
-    const struct device *gpioc = DEVICE_DT_GET(DT_NODELABEL(gpioc));
-    if (true != device_is_ready(gpioc)) {
-        LOG_ERR("GPIO C not ready!");
-        return -1;
-    }
-
     // Initialize CH375 USB host controllers
-    ret = initCh375Device(&gDeviceInputs[0], "CH375A", 2, &ch375aIntGpio, 0);
+    ret = initCh375Device(&gDeviceInputs[0], "CH375A", 2, NULL, 0);
     if (0 != ret) {
         return ret;
     }
 
-    ret = initCh375Device(&gDeviceInputs[1], "CH375B", 3, &ch375bIntGpio, 1);
+    ret = initCh375Device(&gDeviceInputs[1], "CH375B", 3, NULL, 1);
     if (0 != ret) {
         return ret;
     }
@@ -208,12 +187,20 @@ int main(void)
  * @return 0 on success, negative error code otherwise
  */
 static int initCh375Device(DeviceInput_t *pDevIn, const char *pName, int usartIndex, const struct gpio_dt_spec *pIntGpio, uint8_t interfaceNum) {
-  
+    
     int ret = -1;
 
     pDevIn->name = pName;
     pDevIn->interfaceNum = interfaceNum;
-    pDevIn->intGpio = *pIntGpio;
+    
+    // Store INT GPIO (NULL for polling mode)
+    if (NULL != pIntGpio) {
+        pDevIn->intGpio = *pIntGpio;
+    } else {
+        LOG_INF("%s: Running in POLLING MODE", pName);
+        memset(&pDevIn->intGpio, 0, sizeof(pDevIn->intGpio));
+    }
+    
     pDevIn->lastReportTimestampMs = 0;
     pDevIn->reportIntervalMs = DEFAULT_REPORT_INTERVAL_MS;
     pDevIn->isConnected = false;
