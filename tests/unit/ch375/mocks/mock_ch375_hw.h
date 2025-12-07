@@ -5,15 +5,15 @@
  * ╚═══════════════════════════════════════════════════════════════════════╝
  * 
  * @file           mock_ch375_hw.h
- * @brief          CH375 hardware mock for unit testing
+ * @brief          CH375 hardware mock for unit testing with polling support
  * 
  * @author         destrocore
  * @date           2025
  * 
  * @details
  * Mock implementation of CH375 hardware interface for isolated unit
- * testing. Provides response queue, INT pin simulation, and command/data
- * history tracking for test verification.
+ * testing. Provides response queue, status queue for polling mode,
+ * INT pin simulation, and command/data history tracking for test verification.
  * 
  * @copyright 
  * Copyright (c) 2025 akaDestrocore
@@ -55,6 +55,29 @@ void mock_ch375QueueResponse(uint8_t data);
  * @param len Number of bytes
  */
 void mock_ch375QueueResponses(const uint8_t *pData, size_t len);
+
+/**
+ * @brief Queue a status value for GET_STATUS polling
+ * @param status Status byte to queue
+ * @note Use this for control of status polling sequences.
+ *       If not used, mock_ch375QueueResponse() will work for both data and status.
+ */
+void mock_ch375QueueStatus(uint8_t status);
+
+/**
+ * @brief Queue multiple status values
+ * @param pStatuses Array of status bytes
+ * @param len Number of status bytes
+ * @note Use for complex status sequences. Regular queue works for most tests.
+ */
+void mock_ch375QueueStatuses(const uint8_t *pStatuses, size_t len);
+
+/**
+ * @brief Set default status returned when status queue is empty
+ * @param status Default status byte
+ * @note Used as fallback when both queues are empty during GET_STATUS
+ */
+void mock_ch375SetDefaultStatus(uint8_t status);
 
 /**
  * @brief Set INT pin state

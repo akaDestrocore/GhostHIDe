@@ -422,7 +422,6 @@ int ch375_waitInt(struct ch375_Context_t *pCtx, uint32_t timeout_ms) {
     
 	int ret = -1;
     uint32_t start = k_uptime_get_32();
-    uint32_t lastLog = start;
     uint32_t pollCount = 0;
     uint8_t status = 0xFF;
     uint8_t lastStatus = 0xFF;

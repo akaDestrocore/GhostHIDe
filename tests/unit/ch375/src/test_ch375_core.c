@@ -129,7 +129,7 @@ ZTEST(ch375_core, test_set_usb_mode_failure)
 ZTEST(ch375_core, test_get_status)
 {
     uint8_t status = 0;
-    mock_ch375QueueResponse(CH375_USB_INT_SUCCESS);
+    mock_ch375QueueStatus(CH375_USB_INT_SUCCESS);
     
     int ret = ch375_getStatus(pCtx, &status);
     
@@ -159,7 +159,7 @@ ZTEST(ch375_core, test_connect_device_disconnected)
     // First response for testConnect
     mock_ch375QueueResponse(CH375_USB_INT_DISCONNECT);
     // Second response for getStatus called internally
-    mock_ch375QueueResponse(0x00);
+    mock_ch375QueueStatus(0x00);
     
     int ret = ch375_testConnect(pCtx, &connStatus);
     
@@ -172,7 +172,19 @@ ZTEST(ch375_core, test_connect_device_disconnected)
  * ======================================================================== */
 ZTEST(ch375_core, test_wait_int_immediate)
 {
-    mock_ch375SetIntState(true);
+    mock_ch375QueueStatus(CH375_USB_INT_SUCCESS);
+    
+    int ret = ch375_waitInt(pCtx, 1000);
+    
+    zassert_equal(ret, CH375_SUCCESS);
+}
+
+ZTEST(ch375_core, test_wait_int_after_polling)
+{
+    mock_ch375QueueStatus(0x00);
+    mock_ch375QueueStatus(0x00);
+    mock_ch375QueueStatus(0x00);
+    mock_ch375QueueStatus(CH375_USB_INT_SUCCESS);
     
     int ret = ch375_waitInt(pCtx, 1000);
     
@@ -181,9 +193,9 @@ ZTEST(ch375_core, test_wait_int_immediate)
 
 ZTEST(ch375_core, test_wait_int_timeout)
 {
-    mock_ch375SetIntState(false);
+    // Set default status to other value
+    mock_ch375SetDefaultStatus(0x00);
     
-    /* Use short timeout for test speed */
     int ret = ch375_waitInt(pCtx, 10);
     
     zassert_equal(ret, CH375_TIMEOUT);
@@ -195,10 +207,13 @@ ZTEST(ch375_core, test_wait_int_timeout)
 ZTEST(ch375_core, test_send_token_setup)
 {
     uint8_t status;
-    
-    /* Simulate successful SETUP */
-    mock_ch375SetIntState(true);
-    mock_ch375QueueResponse(CH375_USB_INT_SUCCESS);
+
+    // Queue statuses for ch375_waitInt() polling
+    mock_ch375QueueStatus(0x00);
+    mock_ch375QueueStatus(0x00);
+    mock_ch375QueueStatus(CH375_USB_INT_SUCCESS);
+    // Final getStatus call
+    mock_ch375QueueStatus(CH375_USB_INT_SUCCESS);
     
     int ret = ch375_sendToken(pCtx, 0, false, USB_PID_SETUP, &status);
     
@@ -211,12 +226,16 @@ ZTEST(ch375_core, test_send_token_in)
 {
     uint8_t status;
     
-    mock_ch375SetIntState(true);
-    mock_ch375QueueResponse(CH375_USB_INT_SUCCESS);
+    // Queue statuses for polling
+    mock_ch375QueueStatus(0x00);
+    mock_ch375QueueStatus(0x00);
+    mock_ch375QueueStatus(CH375_USB_INT_SUCCESS);
+    mock_ch375QueueStatus(CH375_USB_INT_SUCCESS);
     
     int ret = ch375_sendToken(pCtx, 0, true, USB_PID_IN, &status);
     
     zassert_equal(ret, CH375_SUCCESS);
+    zassert_equal(status, CH375_USB_INT_SUCCESS);
     
     // Verify toggle bit set (0xC0)
     uint8_t history[10];

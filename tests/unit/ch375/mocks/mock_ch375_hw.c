@@ -29,6 +29,7 @@
 #include "mock_ch375_hw.h"
 
 #define MOCK_HISTORY_SIZE 128
+#define MOCK_STATUS_QUEUE_SIZE 64
 
 static int mockWriteCmdFail = 0;
 static uint8_t mockLastCmd = 0;
@@ -43,6 +44,10 @@ static bool mockIntState = false;
 static int mockReadDataFail = 0;
 static int mockDataHistoryCount = 0;
 static uint8_t mockDataHistory[MOCK_HISTORY_SIZE];
+static int mockStatusHead = 0;
+static int mockStatusTail = 0;
+static uint8_t mockStatusQueue[MOCK_STATUS_QUEUE_SIZE];
+static uint8_t mockDefaultStatus = 0x00;
 
 static int mock_writeCmd(struct ch375_Context_t *ctx, uint8_t cmd)
 {
@@ -78,6 +83,20 @@ static int mock_readData(struct ch375_Context_t *ctx, uint8_t *data)
         return CH375_ERROR;
     }
     
+    // Check if this is a GET_STATUS
+    if (mockLastCmd == CH375_CMD_GET_STATUS) {
+        // Return from status queue if available
+        if (mockStatusHead != mockStatusTail) {
+            *data = mockStatusQueue[mockStatusTail];
+            mockStatusTail = (mockStatusTail + 1) % MOCK_STATUS_QUEUE_SIZE;
+            return CH375_SUCCESS;
+        }
+        // Return default status
+        *data = mockDefaultStatus;
+        return CH375_SUCCESS;
+    }
+    
+    // Regular response queue for other reads
     if (mockRespHead == mockRespTail) {
         return CH375_TIMEOUT;
     }
@@ -112,6 +131,9 @@ void mock_ch375Reset(void)
     mockReadDataFail = 0;
     mockCmdHistoryCount = 0;
     mockDataHistoryCount = 0;
+    mockStatusHead = 0;
+    mockStatusTail = 0;
+    mockDefaultStatus = 0x00;
 }
 
 void mock_ch375QueueResponse(uint8_t data)
@@ -125,6 +147,26 @@ void mock_ch375QueueResponses(const uint8_t *pData, size_t len)
     for (size_t i = 0; i < len; i++) {
         mock_ch375QueueResponse(pData[i]);
     }
+}
+
+void mock_ch375QueueStatus(uint8_t status)
+{
+    if ((mockStatusHead + 1) % MOCK_STATUS_QUEUE_SIZE != mockStatusTail) {
+        mockStatusQueue[mockStatusHead] = status;
+        mockStatusHead = (mockStatusHead + 1) % MOCK_STATUS_QUEUE_SIZE;
+    }
+}
+
+void mock_ch375QueueStatuses(const uint8_t *pStatuses, size_t len)
+{
+    for (size_t i = 0; i < len; i++) {
+        mock_ch375QueueStatus(pStatuses[i]);
+    }
+}
+
+void mock_ch375SetDefaultStatus(uint8_t status)
+{
+    mockDefaultStatus = status;
 }
 
 void mock_ch375SetIntState(bool asserted)
