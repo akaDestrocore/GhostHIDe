@@ -105,16 +105,40 @@ int main(void)
     // Print banner
     printk("%s%s%s", "\x1b[36m", banner, "\x1b[0m");
 
+#if defined(CONFIG_SOC_SERIES_STM32F4X)
+    // // Initialize CH375 USB INT pins
+    // static const struct gpio_dt_spec ch375aIntGpio = {
+    //     .port = DEVICE_DT_GET(DT_NODELABEL(gpioc)),
+    //     .pin = 13,
+    //     .dt_flags = GPIO_ACTIVE_LOW
+    // };
+
+    // static const struct gpio_dt_spec ch375bIntGpio = {
+    //     .port = DEVICE_DT_GET(DT_NODELABEL(gpioc)),
+    //     .pin = 14,
+    //     .dt_flags = GPIO_ACTIVE_LOW
+    // };
+
+    // const struct device *gpio_dev = DEVICE_DT_GET(DT_NODELABEL(gpioc));
+    // if (!device_is_ready(gpio_dev)) {
+    //     LOG_ERR("GPIO C not ready!");
+    //     return -1;
+    // }
+
     // Initialize CH375 USB host controllers
-    ret = initCh375Device(&gDeviceInputs[0], "CH375A", 2, NULL, 0);
+    ret = initCh375Device(&gDeviceInputs[0], "CH375A", CH375_A_USART_INDEX, NULL, 0);
     if (0 != ret) {
         return ret;
     }
 
-    ret = initCh375Device(&gDeviceInputs[1], "CH375B", 3, NULL, 1);
+    ret = initCh375Device(&gDeviceInputs[1], "CH375B", CH375_B_USART_INDEX, NULL, 1);
     if (0 != ret) {
         return ret;
     }
+    
+#else
+    #error "Unsupported platform"
+#endif
 
     while (1) {
         LOG_INF("Waiting for USB devices...");

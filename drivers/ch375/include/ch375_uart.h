@@ -13,7 +13,7 @@
  * @details
  * Hardware abstraction layer for CH375 communication via UART. Defines
  * pin mappings, USART indices, and initialization functions for manual
- * bare-metal UART configuration in 9-bit mode.
+ * UART configuration in 9-bit mode.
  * 
  * @copyright 
  * Copyright (c) 2025 akaDestrocore
@@ -33,42 +33,49 @@ extern "C" {
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
-#include <zephyr/drivers/uart.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/util.h>
 #include <inttypes.h>
 #include <string.h>
 #include <stdarg.h>
 #include <stdbool.h>
-
-#include <stm32f4xx_ll_rcc.h>
-#include <stm32f4xx_ll_bus.h>
-#include <stm32f4xx_ll_gpio.h>
-#include <stm32f4xx_ll_usart.h>
-
 #include "ch375.h"
 
 /**
- * use these defined values in function `ch375_hwInitManual()`
+ * Platform-specific includes
  */
-#define CH375_A_USART_INDEX 2
-#define CH375_B_USART_INDEX 3
-
-typedef struct {
-    const char *name;
-    const struct device *uart_dev;
-    USART_TypeDef *huart;
-    struct gpio_dt_spec int_gpio;
-} ch375_HwContext_t;
+#if defined(CONFIG_SOC_SERIES_STM32F4X)
+    #include <zephyr/drivers/uart.h>
+    #include <stm32f4xx_ll_rcc.h>
+    #include <stm32f4xx_ll_bus.h>
+    #include <stm32f4xx_ll_gpio.h>
+    #include <stm32f4xx_ll_usart.h>
+#else
+    #error "Unsupported platform"
+#endif
 
 /**
- * @brief UART bare metal functions
+ * Hardware context structure
  */
+#if defined(CONFIG_SOC_SERIES_STM32F4X)
+    #define CH375_A_USART_INDEX 2
+    #define CH375_B_USART_INDEX 3
 
-int ch375_hwInitManual(const char *name, int usart_index, const struct gpio_dt_spec *int_gpio,
-                         uint32_t initial_baudrate, struct ch375_Context_t **ppCtxOut);
+    typedef struct {
+        const char *name;
+        const struct device *uart_dev;
+        USART_TypeDef *huart;
+        struct gpio_dt_spec int_gpio;
+    } ch375_HwContext_t;
 
+#endif
+
+// Abstract wrapper for CH375 hardware initialization
+int ch375_hwInitManual(const char *name, int uart_index, const struct gpio_dt_spec *int_gpio, uint32_t initial_baudrate, struct ch375_Context_t **ppCtxOut);
+
+// Abstract wrapper for CH375 baudrate modification
 int ch375_hwSetBaudrate(struct ch375_Context_t *pCtx, uint32_t baudrate);
+
 
 #ifdef __cplusplus
 }
