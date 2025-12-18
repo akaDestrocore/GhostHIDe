@@ -50,6 +50,10 @@ extern "C" {
     #include <stm32f4xx_ll_bus.h>
     #include <stm32f4xx_ll_gpio.h>
     #include <stm32f4xx_ll_usart.h>
+#elif defined(CONFIG_SOC_RP2350A_M33) || defined(CONFIG_SOC_SERIES_RP2XXX)
+    #include <hardware/pio.h>
+    #include <hardware/clocks.h>
+    #include <hardware/gpio.h>
 #else
     #error "Unsupported platform"
 #endif
@@ -66,6 +70,31 @@ extern "C" {
         const struct device *uart_dev;
         USART_TypeDef *huart;
         struct gpio_dt_spec int_gpio;
+    } ch375_HwContext_t;
+
+#elif defined(CONFIG_SOC_RP2350A_M33) || defined(CONFIG_SOC_SERIES_RP2XXX)
+    #define CH375_A_USART_INDEX 0
+    #define CH375_B_USART_INDEX 1   
+
+    #define PIO_UART_TX_PIN_CH375A 4
+    #define PIO_UART_RX_PIN_CH375A 5
+    #define PIO_UART_TX_PIN_CH375B 8
+    #define PIO_UART_RX_PIN_CH375B 9
+
+    #define PIO_UART_SM_TX 0
+    #define PIO_UART_SM_RX 1
+
+    typedef struct {
+        const char *name;
+        uint32_t baudrate;
+        struct gpio_dt_spec int_gpio;
+        PIO pio;
+        uint sm_tx;
+        uint sm_rx;
+        uint tx_pin;
+        uint rx_pin;
+        uint offset_tx;
+        uint offset_rx;
     } ch375_HwContext_t;
 
 #endif
