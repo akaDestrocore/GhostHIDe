@@ -44,6 +44,8 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 #define MAIN_LOOP_SLEEP_MS 1
 #define KEYBOARD_BREAK_TIMEOUT_MS 50
 #define ENUMERATION_WAIT_TIMEOUT_MS 10000
+#define IFACE_MOUSE     0
+#define IFACE_KEYBOARD  1
 
 /* Type Deffinitions ---------------------------------------------------------*/
 typedef struct {
@@ -125,20 +127,29 @@ int main(void)
     //     return -1;
     // }
 
+#elif defined(CONFIG_SOC_RP2350A_M33)
+
+    // Verify GPIO is ready
+    // const struct device *gpio_dev = DEVICE_DT_GET(DT_NODELABEL(gpio0));
+    // if (!device_is_ready(gpio_dev)) {
+    //     LOG_ERR("GPIO not ready!");
+    //     return -1;
+    // }
+
+#else
+    #error "Unsupported platform"
+#endif
+
     // Initialize CH375 USB host controllers
-    ret = initCh375Device(&gDeviceInputs[0], "CH375A", CH375_A_USART_INDEX, NULL, 0);
+    ret = initCh375Device(&gDeviceInputs[0], "CH375A", CH375_A_USART_INDEX, NULL, IFACE_MOUSE);
     if (0 != ret) {
         return ret;
     }
 
-    ret = initCh375Device(&gDeviceInputs[1], "CH375B", CH375_B_USART_INDEX, NULL, 1);
+    ret = initCh375Device(&gDeviceInputs[1], "CH375B", CH375_B_USART_INDEX, NULL, IFACE_KEYBOARD);
     if (0 != ret) {
         return ret;
     }
-    
-#else
-    #error "Unsupported platform"
-#endif
 
     while (1) {
         LOG_INF("Waiting for USB devices...");
@@ -206,7 +217,7 @@ int main(void)
  * @param pDevIn Pointer to device input structure
  * @param pName Device name for logging
  * @param usartIndex Hardware USART index
- * @param pIntGpio GPIO interrupt pin specification
+ * @param pIntGpio GPIO interrupt pin specification (NULL for polling mode)
  * @param interfaceNum USB interface number (0=mouse, 1=keyboard)
  * @return 0 on success, negative error code otherwise
  */
