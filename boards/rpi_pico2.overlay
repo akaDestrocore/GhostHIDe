@@ -1,0 +1,47 @@
+/ {
+    chosen {
+        zephyr,console = &uart0;
+        zephyr,shell-uart = &uart0;
+    };
+};
+
+&uart1 {
+    status = "disabled";
+};
+
+&pio0 {
+    compatible = "raspberrypi,pico-pio";
+    status = "okay";
+    clocks = <&clocks RPI_PICO_CLKID_CLK_SYS>;
+    resets = <&reset RPI_PICO_RESETS_RESET_PIO0>;
+    #address-cells = <1>;
+    #size-cells = <0>;
+};
+
+&pio1 {
+    compatible = "raspberrypi,pico-pio";
+    status = "okay";
+    clocks = <&clocks RPI_PICO_CLKID_CLK_SYS>;
+    resets = <&reset RPI_PICO_RESETS_RESET_PIO1>;
+    #address-cells = <1>;
+    #size-cells = <0>;
+};
+
+&usbd {
+    status = "okay";
+};
+
+&gpio0 {
+    status = "okay";
+};
+
+/ {
+    ch375_devices {
+        compatible = "gpio-keys";
+        
+        ch375a_int: ch375a_int {
+            gpios = <&gpio0 2 GPIO_ACTIVE_LOW>;
+            label = "CH375A INT";
+        };
+    };
+};
