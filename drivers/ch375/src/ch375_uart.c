@@ -28,10 +28,19 @@
 LOG_MODULE_REGISTER(ch375_uart, LOG_LEVEL_DBG);
 
 #if defined(CONFIG_SOC_SERIES_STM32F4X)
-    extern int ch375_stm32_hw_init(const char *name, int usart_index, const struct gpio_dt_spec *int_gpio, uint32_t initial_baudrate, struct ch375_Context_t **ppCtxOut);
+    extern int ch375_stm32_hw_init(const char *name, int usart_index, 
+                                   const struct gpio_dt_spec *int_gpio, 
+                                   uint32_t initial_baudrate, 
+                                   struct ch375_Context_t **ppCtxOut);
     extern int ch375_stm32_set_baudrate(struct ch375_Context_t *pCtx, uint32_t baudrate);
+#elif defined(CONFIG_SOC_RP2350A_M33) || defined(CONFIG_SOC_SERIES_RP2XXX)
+    extern int ch375_rp2_hw_init(const char *name, int uart_index, 
+                                const struct gpio_dt_spec *int_gpio, 
+                                uint32_t initial_baudrate, 
+                                struct ch375_Context_t **ppCtxOut);
+    extern int ch375_rp2_set_baudrate(struct ch375_Context_t *pCtx, uint32_t baudrate);
 #else
-    #error "Unsupported platform - need CONFIG_SOC_SERIES_STM32F4X"
+    #error "Unsupported platform. Please build for a supported platform."
 #endif
 
 /**
@@ -42,9 +51,11 @@ int ch375_hwInitManual(const char *name, int usart_index, const struct gpio_dt_s
 #if defined(CONFIG_SOC_SERIES_STM32F4X)
     LOG_INF("Platform: STM32F4X");
     return ch375_stm32_hw_init(name, usart_index, int_gpio, initial_baudrate, ppCtxOut);
-    
+#elif defined(CONFIG_SOC_RP2350A_M33)
+    LOG_INF("Platform: RP2350A_M33");
+    return ch375_rp2_hw_init(name, usart_index, int_gpio, initial_baudrate, ppCtxOut);
 #else
-    LOG_ERR("FATAL: No platform defined!");
+    LOG_ERR("ERROR: No platform defined!");
     return -ENOTSUP;
 #endif
 }
@@ -58,8 +69,10 @@ int ch375_hwSetBaudrate(struct ch375_Context_t *pCtx, uint32_t baudrate)
     
 #if defined(CONFIG_SOC_SERIES_STM32F4X)
     return ch375_stm32_set_baudrate(pCtx, baudrate);
+#elif defined(CONFIG_SOC_RP2350A_M33)
+    return ch375_rp2_set_baudrate(pCtx, baudrate);
 #else
-    LOG_ERR("FATAL: No platform defined!");
+    LOG_ERR("ERROR: No platform defined!");
     return -ENOTSUP;
 #endif
 }
