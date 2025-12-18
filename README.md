@@ -1,14 +1,51 @@
-![LOGO](https://github.com/user-attachments/assets/4a2d50ef-a84f-43d8-87f0-4d3ea64172d8)
+![GhostHIDe](https://github.com/user-attachments/assets/4a2d50ef-a84f-43d8-87f0-4d3ea64172d8)
 
-# GhostHIDe - USB HID Proxy
+# GhostHIDe - Advanced USB HID Proxy with Real-Time Input Modification
+
 
 ## Overview
 
-GhostHIDe is a production-ready USB HID (Human Interface Device) proxy system built on Zephyr RTOS for STM32F4 Discovery board. It acts as a transparent man-in-the-middle between USB input devices (mouse and keyboard) and a host PC, enabling real-time input capture and modification.
+**GhostHIDe** is a USB HID proxy system that sits transparently between your input devices and PC, enabling real-time modification of mouse and keyboard data. Built on Zephyr RTOS for embedded platforms, it features pattern-based input compensation.
 
-The system features comprehensive HID report descriptor parsing, supporting a wide variety of mice with different report formats, button counts, and axis configurations. RGB lightning might not work on some mice and keyboards (if they have a specific endpoint for RGB control).
+### Key Features
+
+**Universal HID Support**
+- Dynamic report descriptor parsing supports mice with 3-16 buttons, 8/16-bit axes and wheel
+- Standard 6-key rollover keyboards with modifier key support
+
+**Real-Time Input Modification**
+- Pattern-based recoil compensation system
+- Configurable coefficients and sensitivity on-the-fly
+- Hotkey-based profile switching
+
+**Multi-Platform Architecture**
+- **stm32f4_disco** - Primary platform with manual 9-bit UART
+- **rpi_pico2** - PIO-based 9-bit UART implementation
+- Hardware abstraction layer enables easy platform additions
+
+**Production-Grade Testing**
+- Mock hardware layer for isolated testing
+- Real-world device descriptor validation
+
+---
+
+## Table of Contents
+
+- [Architecture](#architecture)
+- [Hardware Requirements](#hardware-requirements)
+- [Getting Started](#getting-started)
+- [Build Options](#build-options)
+- [Hardware Setup](#hardware-setup)
+- [Usage Guide](#usage-guide)
+- [Profile Management](#profile-management)
+- [Unit Tests](#unit-tests)
+- [License](#license)
+
+---
 
 ## Architecture
+
+### System Block Diagram
 
 ```mermaid
 graph TB
@@ -17,220 +54,328 @@ graph TB
         KEYBOARD["USB Keyboard"]
     end
 
-    subgraph CH375_LAYER["CH375 USB HOST MODULES"]
-        CH375A["CH375_A<br/>Mouse Host<br/>━━━━━━━━<br/>USART2: PA2/PA3<br/>INT: PC13<br/>9-bit UART @ 115200"]
-        CH375B["CH375_B<br/>Keyboard Host<br/>━━━━━━━━<br/>USART3: PB10/PB11<br/>INT: PC14<br/>9-bit UART @ 115200"]
+    CH375A["CH375_A<br/>Mouse Handler<br/>━━━━━━━━<br/>9-bit UART<br/>115200 baud"]
+    CH375B["CH375_B<br/>Keyboard Handler<br/>━━━━━━━━<br/>9-bit UART<br/>115200 baud"]
+
+    subgraph MCU["MICROCONTROLLER"]
+        direction TB
+        DRIVERS["Driver Layer<br/>━━━━━━━━<br/>• CH375 Core<br/>• USB Host<br/>• HID Parser"]
+        LOGIC["Application Logic<br/>━━━━━━━━<br/>• Input Patterns<br/>• Recoil Compensation<br/>• Hotkey Handler"]
+        OUTPUT["USB Output<br/>━━━━━━━━<br/>Composite HID<br/>(Mouse + Keyboard)"]
+        
+        DRIVERS --> LOGIC
+        LOGIC --> OUTPUT
     end
 
-    subgraph STM32["stm32f4_disco"]
-        subgraph HW["Hardware Peripherals"]
-            USART["USART2/3<br/>Manual Init"]
-            USBOTG["USB OTG FS<br/>PA11/PA12"]
-            CONSOLE["UART4 Console<br/>PC10/PA1<br/>115200 baud"]
-        end
-    end
-
-    subgraph PC["HOST PC"]
-        OS["Operating System"]
+    subgraph PC["HOST COMPUTER"]
+        OS["Operating System<br/>━━━━━━━━<br/>Seen as standard<br/>USB HID device"]
     end
 
     MOUSE -.->|USB| CH375A
     KEYBOARD -.->|USB| CH375B
-
-    CH375A -.->|USART| USART
-    CH375B -.->|USART| USART
     
-    USBOTG ==>|"USB Device<br/>Composite HID"| OS
-
-    CONSOLE -.->|"Debug Logs<br/>115200 baud"| PC
+    CH375A -->|UART| DRIVERS
+    CH375B -->|UART| DRIVERS
+    
+    OUTPUT ==>|USB| OS
 
     classDef inputDevice fill:#D5FF46,stroke:#333,stroke-width:3px,color:#000
     classDef usbChip fill:#250BFF,stroke:#333,stroke-width:3px,color:#fff
-    classDef hardware fill:#9854F9,stroke:#333,stroke-width:2px,color:#000
+    classDef mcu fill:#9854F9,stroke:#333,stroke-width:2px,color:#fff
     classDef pc fill:#03B893,stroke:#333,stroke-width:3px,color:#fff
 
     class MOUSE,KEYBOARD inputDevice
     class CH375A,CH375B usbChip
-    class USART,USBOTG,CONSOLE hardware
+    class DRIVERS,LOGIC,OUTPUT mcu
     class OS,PC pc
 ```
 
-## Hardware Components
 
-### Main Board
-- **stm32f4_disco** (STM32F407VGT6)
+## Hardware Requirements
 
-### USB Host Interface
-- **2x CH375 USB Host Controllers**
-  - Connected via UART (9-bit mode for command/data differentiation)
-  - One dedicated for mouse, one for keyboard
-  - Operates at 115200 baud after initialization
-  - Hardware interrupt pins for event notification
+### Supported Platforms
 
-### Pin Configuration
-```
-Mouse:
-  - USART2: PA2 (TX), PA3 (RX)
-  - INT: PC13 (GPIO, active low)
+#### Option 1: Raspberry Pi Pico 2
+- **Board**: rpi_pico2/rp2350a/m33 (Raspberry Pi Pico 2)
+- **Peripherals**:
+  - PIO0 SM0/SM1 (GP4/GP5) - PIO UART for one of CH375 chips
+  - PIO1 SM0/SM1 (GP8/GP9) - PIO UART for the other CH375 chip
+  - UART0 (GP0/GP1) - Console at 115200 baud
+  - USB Device - Device output
+- **Power**: USB-powered
 
-Keyboard:
-  - USART3: PB10 (TX), PB11 (RX)
-  - INT: PC14 (GPIO, active low)
+#### Option 2: STM32F4 Discovery
+- **Board**: stm32f4_disco (STM32F407VGT6)
+- **Peripherals**:
+  - USART2 (PA2/PA3) - PIO UART for one of CH375 chips
+  - USART3 (PB10/PB11) - PIO UART for the other CH375 chip
+  - UART4 (PC10/PA1) - Console at 115200 baud
+  - USB OTG FS - Device output (micro USB)
+- **Power**: USB-powered (mini USB)
 
-Console:
-  - UART4: PC10 (TX), PA1 (RX) @ 115200 baud
+## Getting Started
 
-USB Device:
-  - USB OTG FS: PA11 (DM), PA12 (DP)
-```
+1. **Zephyr Development Environment**
+   ```bash
+   # Follow official guide
+   https://docs.zephyrproject.org/latest/develop/getting_started/index.html
+   ```
 
-## Key Features
+2. **Platform-Specific Tools**
+   - **STM32F4**: ARM GCC toolchain, STM32CubeProgrammer
+   - **RP2350**: Raspberry Pi Pico SDK, picotool, picoasm
 
-### 1. **Dual USB Host Support**
-- Simultaneously connects to USB mouse and keyboard
-- Independent enumeration and communication
-- Per-device interrupt handling
+### Build and Flash
 
-### 2. **USB Device Emulation**
-- Presents as composite HID device to PC
-- Emulates both mouse and keyboard simultaneously
-- Standard HID descriptors for maximum compatibility
-
-### 3. **Dynamic HID Parser**
-- Parses arbitrary HID report descriptors at runtime
-- Supports wide variety of device formats:
-  - **Mice**: 3-16 buttons, 8/16-bit axes, optional wheel
-  - **Keyboards**: Standard 6-key rollover, modifier keys
-- Automatically detects report structure and field offsets
-- Handles Report ID presence/absence
-
-### 4. **Input Translation Layer**
-- Normalizes variable input formats to standardized output
-- Preserves all button states and axis values
-- Efficient report filtering and forwarding
-- Minimal latency overhead
-
-### 5. **Comprehensive Testing**
-- Unit tests covering all major components
-- Mock hardware layer for isolated testing
-- Real-world device descriptor validation
-- Zephyr ztest framework integration
-
-## Software Architecture
-
-### Driver Stack
-
-#### CH375 Driver (`drivers/ch375/`)
-Low-level USB host controller driver implementing the CH375 protocol:
-
-**Core Protocol** (`ch375.c/h`):
-- Device existence check and version query
-- USB mode configuration (host with SOF)
-- Status monitoring and interrupt handling
-- Block data transfer primitives
-
-**UART Hardware Layer** (`ch375_uart.c/h`):
-- Manual UART initialization bypassing Zephyr API
-- 9-bit mode configuration using STM32 LL drivers
-- Command/data differentiation via 9th bit
-- Dynamic baudrate switching (9600 → 115200)
-
-**USB Host Layer** (`ch375_host.c/h`):
-- Device enumeration and address assignment
-- Descriptor retrieval (device, configuration, interface, endpoint)
-- Control transfers with SETUP/DATA/STATUS stages
-- Bulk transfers with NAK handling and retry logic
-- Endpoint management and toggle tracking
-
-#### HID Parser (`drivers/hid/`)
-High-level HID device abstraction with dynamic parsing - uses deprecated APIs :
-
-**Generic Parser** (`hid_parser.c/h`):
-- HID report descriptor item fetching
-- Device type detection (mouse/keyboard/other)
-- Report buffer allocation and management
-- Bulk transfer wrapper for HID GET_REPORT
-
-**Mouse Handler** (`hid_mouse.c/h`):
-- Dynamic button field extraction (variable bit positions)
-- Orientation axis parsing (8/16/32-bit, signed/unsigned)
-- Wheel support detection and handling
-
-**Keyboard Handler** (`hid_keyboard.c/h`):
-- Modifier key bitmap (8 bits for Ctrl/Shift/Alt/GUI)
-- Key code array management (6-key rollover)
-- Duplicate key prevention
-
-**Output Translator** (`hid_output.c/h`):
-- Input format normalization
-- Report ID filtering for multi-report devices
-- Standardized output report generation
-
-### Application Layer
-
-#### USB Device Proxy (`src/usb_hid_proxy.c`)
-Composite USB HID device implementation:
-- Registers separate mouse and keyboard interfaces
-- Uses legacy Zephyr USB stack for dynamic data modification
-- Semaphore-based endpoint synchronization
-- Comprehensive USB state tracking
-
-## Critical Implementation Details
-
-### CH375 9-bit UART Mode
-The CH375 uses the 9th bit to distinguish commands from data:
-- **Command**: 9th bit = 1 (0x100 | cmd)
-- **Data**: 9th bit = 0 (0x000 | data)
-
-Implementation uses STM32 LL (Low-Level) drivers for direct register access since Zephyr's UART API doesn't support 9-bit mode. USART2/3 are disabled in Device Tree and manually initialized to avoid conflicts.
-
-### HID Report Descriptor Parsing
-The parser implements a state machine that walks through HID items:
-1. Tracks global state (usage page, logical min/max, report size/count)
-2. Accumulates local state (individual usages)
-3. Processes main items (Input/Output/Feature) to identify fields
-4. Calculates byte offsets and bit positions for each field
-5. Handles both absolute and relative values
-6. Detects report ID presence for proper offset adjustment
-
-## Build Instructions
-
-### Prerequisites
-First, download Zephyr and install Zephyr SDK. Follow the official guide:
-https://docs.zephyrproject.org/latest/develop/getting_started/index.html
-
-### Build
 ```bash
-west build -p always -b stm32f4_disco /path/to/GhostHIDe
+# Clone repository
+git clone https://github.com/akaDestrocore/GhostHIDe.git
+cd GhostHIDe
+
+# Build for stm32f4_disco
+west build -p always -b stm32f4_disco /path/to/GhostHIDe/
 west flash
+
+# OR build for Raspberry Pi Pico 2
+west build -p always -b rpi_pico2/rp2350a/m33 /path/to/GhostHIDe/
+# Flash by dragging .uf2 from Zephyr build directory to RPI-RP2 drive in BOOTSEL mode
 ```
 
-## Testing
+### First Run
 
-### Quick Start - Run All Tests
+1. **Connect Hardware**:
+   - Wire CH375's RX pin to MCU's TX and CH375's TX to MCU's RX, make sure to have common GND
+   - Connect USB mouse to CH375_A
+   - Connect USB keyboard to CH375_B
+   - Connect microcontroller USB to PC
+
+2. **Monitor Console**:
+Either use a serial terminal application with GUI or minicom. Serial console is only needed to see feedback from MCU.
+
+3. **Verify Operation**:
+   - Console shows device enumeration
+   - PC recognizes composite HID device
+   - Mouse and keyboard function normally (by default forwards inputs without HID modification until you enable any profile)
+
+---
+
+## Build Options
+
+### Configuration Options
+
+Edit `prj.conf` to customize:
+
+```ini
+# USB Device Configuration
+CONFIG_USB_DEVICE_VID=0x1E7D                            # Vendor ID
+CONFIG_USB_DEVICE_PID=0x2E7C                            # Product ID
+CONFIG_USB_DEVICE_MANUFACTURER="GhostHIDe"              # Manufacturer string
+CONFIG_USB_DEVICE_PRODUCT="Composite USB HID Device"    # Product string
+
+# Logging Levels
+CONFIG_LOG_DEFAULT_LEVEL=3                              # 0=OFF, 1=ERR, 2=WRN, 3=INF, 4=DBG
+
+# Performance Tuning
+CONFIG_MAIN_STACK_SIZE=4096                             # Main thread stack
+CONFIG_HEAP_MEM_POOL_SIZE=16384                         # Dynamic allocation pool
+```
+
+### Adding a New Platform
+
+To support additional hardware (e.g., RP2040, STM32F1):
+
+1. **Create Platform-Specific UART Driver**:
+   ```c
+   // drivers/ch375/src/ch375_uart_whatevernewplatform.c
+   int ch375_newplatform_hw_init(const char *name, int uart_index, 
+                                  const struct gpio_dt_spec *int_gpio,
+                                  uint32_t initial_baudrate,
+                                  struct ch375_Context_t **ppCtxOut);
+   
+   int ch375_newplatform_set_baudrate(struct ch375_Context_t *pCtx, 
+                                      uint32_t baudrate);
+   ```
+
+2. **Update Hardware Abstraction**:
+   ```c
+   // drivers/ch375/src/ch375_uart.c
+   #elif defined(CONFIG_SOC_SERIES_WHATEVERNEWPLATFORM)
+       extern int ch375_newplatform_hw_init(...);
+       extern int ch375_newplatform_set_baudrate(...);
+   #endif
+   ```
+
+3. **Add Device Tree Overlay**:
+   ```dts
+   // boards/newplatform.overlay
+   / {
+       chosen {
+           zephyr,console = &uart0;
+       };
+   };
+   // ... configure peripherals
+   ```
+
+4. **Update CMakeLists.txt**:
+   ```cmake
+   elseif(CONFIG_SOC_SERIES_NEWPLATFORM)
+       target_sources(app PRIVATE
+           drivers/ch375/src/ch375_uart_newplatform.c
+       )
+   endif()
+   ```
+
+---
+
+## Hardware Setup
+
+### CH375 Module Configuration
+
+**CRITICAL**: CH375 modules must be configured for **UART mode**, not SPI mode. Also check your module's H1 jumper to be in serial mode:
+
+![Switches](https://robu.in/wp-content/uploads/2017/09/ch376_b.jpg)
+
+
+Consult your exact module's datasheet for pin locations. I personally used two different CH375 boards that have a bit different configuration.
+
+### Power Considerations
+
+- **stm32f4_disco**: Powered via USB
+- **rpi_pico2**: Uses VBUS for both CH375 - may need external 5V supply for power-hungry devices (see RP2360 hardware documentation)
+- in some cases on-board pull up resistance may not be enough for CH375 RX pin, so you may add another 10kOhms as pull up in that case. 
+
+## Usage Guide
+
+### Default Controls
+
+Once running, GhostHIDe forwards all inputs transparently. Use these **keyboard hotkeys** to control recoil compensation:
+
+## Profile Management
+| Key | Function |
+|-----|----------|
+| **Page Up** | Enable recoil compensation |
+| **Page Down** | Disable recoil compensation |
+| **1** | Load Soldier 76 profile (Overwatch 2) |
+| **2** | Load Cassidy profile (Overwatch 2) |
+
+#### On the fly tuning
+| Key | Function |
+|-----|----------|
+| **+** (Equals) | Increase compensation coefficient (+0.1) |
+| **-** (Minus) | Decrease compensation coefficient (-0.1) |
+| **<** (Comma) | Increase sensitivity adjustment (+0.1) |
+| **>** (Period) | Decrease sensitivity adjustment (-0.1) |
+
+### Recoil Compensation System
+
+The system applies mouse movement patterns when **Left Mouse Button** is pressed:
+
+1. **Profile Selection**: Choose weapon/character profile (number hotkeys)
+2. **Enable Compensation**: Press Page Up
+3. **Fire Weapon**: Hold LMB - compensation activates automatically
+4. **Release**: Release LMB - compensation stops
+5. **Fine-Tune**: Adjust coefficient/sensitivity while testing
+
+#### Understanding Parameters
+
+- **Coefficient** (`0.1 - 10.0`, default `1.0`)
+  - Scales the **strength** of compensation
+  - Higher = more aggressive compensation pull
+  - Lower = gentler compensation
+  
+- **Sensitivity** (`0.1 - 100.0`, default `2.5`)
+  - Scales compensation relative to your **in-game sensitivity**
+  - Match this to your actual mouse DPI / game sensitivity
+  - Higher sensitivity = less compensation needed
+
+### Step-by-Step: Adding a New Profile
+
+#### 1. Define Pattern Data
+
+Add your pattern to `src/input_patterns.c`:
+
+
+**Tips**:
+- Use high precision for X/Y values (5 decimal places)
+- Time values should match weapon's fire rate
+- Include all shots in a magazine (pattern loops if magazine longer)
+
+#### 2. Register in Collection Array
+
+Find the `sRecoilCollectArr` array and add your entry:
+
+```c
+#define RECOIL_COMP_PRESET_COUNT 4  // Increment this!
+
+static const PresetCollection_t sRecoilCollectArr[RECOIL_COMP_PRESET_COUNT] = {
+    
+    { .pData = NULL, .dataLen = 0, .firerounds_sampling = 0 }, // Slot 0: Empty
+    
+    { 
+        .pData = gRawPreset_OW2_Soldier76,
+        .dataLen = ARRAY_SIZE(gRawPreset_OW2_Soldier76),
+        .firerounds_sampling = round(111/USB_REPORT_INTERVAL),
+    },
+    
+    { 
+        .pData = gRawPreset_OW2_Cassidy,
+        .dataLen = ARRAY_SIZE(gRawPreset_OW2_Cassidy),
+        .firerounds_sampling = round(500/USB_REPORT_INTERVAL),
+    },
+    
+    // Add new entries below
+};
+```
+
+**`firerounds_sampling` Explanation**:
+- Divides fire interval by USB report interval (8ms standard)
+- Example: 90ms fire rate → `90/8 = 11.25` → `round(11.25) = 11` samples per shot
+- This determines how compensation is distributed across USB reports
+
+#### 3. Add Enum Entry
+
+Update the enum in `include/input_patterns.h`:
+
+```c
+typedef enum {
+    TEMPLATE_NONE,
+    TEMPLATE_OW2_SOLDIER76,
+    TEMPLATE_OW2_CASSIDY,
+    // Add your new template/profile
+} PatternPreset_e;
+```
+
+#### 4. Bind to Hotkey
+
+In `src/main.c`, add hotkey handling:
+
+```c
+static int handleKeyboardInput(DeviceInput_t *pDevIn) {
+    
+    // Bindings for S76 and Cassidy above
+
+    // Bind to keyboard "3" key
+    hidKeyboard_GetKey(&pDevIn->keyboard, HID_KBD_NUMBER('3'), &value, false);
+    if (0 != value) {
+        int res = recoilComp_setPreset(gRecoilCompCtx, TEMPLATE_APEX_R301);
+        if (0 == res) {
+            LOG_INF("[ OK ] Selected: New profile");
+        }
+    }
+    
+    // Rest of the code
+}
+```
+
+---
+
+## Unit Tests
 
 ```bash
-# From Zephyr workspace root
+# Run all tests
 west twister -T /path/to/GhostHIDe/tests/unit/ch375 -p native_sim
 ```
-
-### Run with Verbose Output
-
-```bash
-west twister -T /path/to/GhostHIDe/tests/unit/ch375 -p native_sim -v
-```
-
-## Project Status
-
-### Completed Features
-- [x] CH375 driver adapted for Zephyr
-- [x] Mouse input handling
-- [x] Keyboard input handling
-- [x] USB device composite output
-- [ ] Input modification
-- [ ] Extended keyboard support (N-key rollover, vendor-specific features)
-
-## Troubleshooting
+---
 
 ## License
 
@@ -244,3 +389,14 @@ the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
 See [LICENSE](LICENSE) for full details.
+
+### Third-Party Components
+
+- **Zephyr RTOS**: Apache License 2.0
+- **CH375 Datasheet**: WCH (reference only)
+- **RP2040/RP2350 PIO**: Raspberry Pi Ltd. examples adapted
+---
+
+## Disclaimer
+
+This project is intended for **educational and personal use only**. Use of input modification in competitive online games may violate terms of service. The authors are not responsible for bans, suspensions, or other consequences resulting from use of this software. Always check game/platform policies before use.
