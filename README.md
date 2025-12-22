@@ -20,7 +20,7 @@
 
 **Multi-Platform Architecture**
 - **stm32f4_disco** - Primary platform with manual 9-bit UART
-- **rpi_pico2** - PIO-based 9-bit UART implementation
+- **Raspberry Pi Pico family** - PIO-based 9-bit UART implementation (Pico, Pico W, Pico 2, Pico 2 W)
 - Hardware abstraction layer enables easy platform additions
 
 **Production-Grade Testing**
@@ -95,8 +95,13 @@ graph TB
 
 ### Supported Platforms
 
-#### Option 1: Raspberry Pi Pico 2
-- **Board**: rpi_pico2/rp2350a/m33 (Raspberry Pi Pico 2)
+#### Option 1: Raspberry Pi Pico Family
+- **Supported Boards**:
+  - **Raspberry Pi Pico** (RP2040) - `rpi_pico`
+  - **Raspberry Pi Pico W** (RP2040 with WiFi) - `rpi_pico/rp2040/w`
+  - **Raspberry Pi Pico 2** (RP2350A) - `rpi_pico2/rp2350a/m33`
+  - **Raspberry Pi Pico 2 W** (RP2350A with WiFi) - `rpi_pico2/rp2350a/m33/w`
+
 - **Peripherals**:
   - PIO0 SM0/SM1 (GP4/GP5) - PIO UART for one of CH375 chips
   - PIO1 SM0/SM1 (GP8/GP9) - PIO UART for the other CH375 chip
@@ -123,7 +128,7 @@ graph TB
 
 2. **Platform-Specific Tools**
    - **STM32F4**: ARM GCC toolchain, STM32CubeProgrammer
-   - **RP2350**: Raspberry Pi Pico SDK, picotool, picoasm
+   - **RP2040/RP2350**: Raspberry Pi Pico SDK, picotool, picoasm
 
 ### Build and Flash
 
@@ -136,8 +141,18 @@ cd GhostHIDe
 west build -p always -b stm32f4_disco /path/to/GhostHIDe/
 west flash
 
-# OR build for Raspberry Pi Pico 2
+# Or build for Raspberry Pi Pico (RP2040)
+west build -p always -b rpi_pico /path/to/GhostHIDe/
+
+# Or build for Raspberry Pi Pico W (RP2040 with CYW43439)
+west build -p always -b rpi_pico/rp2040/w /path/to/GhostHIDe/
+
+# Or build for Raspberry Pi Pico 2 (RP2350A)
 west build -p always -b rpi_pico2/rp2350a/m33 /path/to/GhostHIDe/
+
+# Or build for Raspberry Pi Pico 2 W (RP2350A with CYW43439)
+west build -p always -b rpi_pico2/rp2350a/m33/w /path/to/GhostHIDe/
+
 # Flash by dragging .uf2 from Zephyr build directory to RPI-RP2 drive in BOOTSEL mode
 ```
 
@@ -182,7 +197,7 @@ CONFIG_HEAP_MEM_POOL_SIZE=16384                         # Dynamic allocation poo
 
 ### Adding a New Platform
 
-To support additional hardware (e.g., RP2040, STM32F1):
+To support additional hardware:
 
 1. **Create Platform-Specific UART Driver**:
    ```c
@@ -241,7 +256,7 @@ Consult your exact module's datasheet for pin locations. I personally used two d
 ### Power Considerations
 
 - **stm32f4_disco**: Powered via USB
-- **rpi_pico2**: Uses VBUS for both CH375 - may need external 5V supply for power-hungry devices (see RP2360 hardware documentation)
+- **rpi_pico/rpi_pico2**: Uses VBUS for both CH375 - may need external 5V supply for power-hungry devices (see RP2040/RP2350 hardware documentation)
 - in some cases on-board pull up resistance may not be enough for CH375 RX pin, so you may add another 10kOhms as pull up in that case. 
 
 ## Usage Guide
