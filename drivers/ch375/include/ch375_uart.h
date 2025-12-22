@@ -50,7 +50,7 @@ extern "C" {
     #include <stm32f4xx_ll_bus.h>
     #include <stm32f4xx_ll_gpio.h>
     #include <stm32f4xx_ll_usart.h>
-#elif defined(CONFIG_SOC_RP2350A_M33) || defined(CONFIG_SOC_SERIES_RP2XXX)
+#elif defined(CONFIG_SOC_RP2350A_M33) || defined(CONFIG_SOC_RP2040) || defined(CONFIG_SOC_SERIES_RP2XXX)
     #include <hardware/pio.h>
     #include <hardware/clocks.h>
     #include <hardware/gpio.h>
@@ -72,7 +72,7 @@ extern "C" {
         struct gpio_dt_spec int_gpio;
     } ch375_HwContext_t;
 
-#elif defined(CONFIG_SOC_RP2350A_M33) || defined(CONFIG_SOC_SERIES_RP2XXX)
+#elif defined(CONFIG_SOC_RP2350A_M33) || defined(CONFIG_SOC_RP2040) || defined(CONFIG_SOC_SERIES_RP2XXX)
     #define CH375_A_USART_INDEX 0
     #define CH375_B_USART_INDEX 1   
 

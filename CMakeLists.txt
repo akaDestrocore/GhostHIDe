@@ -4,6 +4,8 @@ if(BOARD STREQUAL "stm32f4_disco")
     set(DTC_OVERLAY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/boards/stm32f4_disco.overlay")
 elseif(BOARD MATCHES "^rpi_pico2")
     set(DTC_OVERLAY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/boards/rpi_pico2.overlay")
+elseif(BOARD MATCHES "^rpi_pico$")
+    set(DTC_OVERLAY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/boards/rpi_pico.overlay")
 endif()
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
@@ -36,13 +38,13 @@ if(CONFIG_SOC_SERIES_STM32F4X)
         ${ZEPHYR_BASE}/modules/hal/stm32/stm32cube/stm32f4xx/soc
     )
     
-elseif(CONFIG_SOC_RP2350A_M33)
+elseif(CONFIG_SOC_RP2350A_M33 OR CONFIG_SOC_RP2040)
 
     target_sources(app PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/drivers/ch375/src/ch375_uart_rp2.c
     )
     
-    # RP2350 PIO support
+    # RP Pico/Pico 2 PIO support
     zephyr_library_include_directories(
         ${ZEPHYR_BASE}/../modules/hal/rpi_pico/src/rp2_common/hardware_pio/include
         ${ZEPHYR_BASE}/../modules/hal/rpi_pico/src/rp2_common/hardware_clocks/include

@@ -127,7 +127,7 @@ int main(void)
     //     return -1;
     // }
 
-#elif defined(CONFIG_SOC_RP2350A_M33)
+#elif defined(CONFIG_SOC_RP2350A_M33) || defined(CONFIG_SOC_RP2040)
 
     // Verify GPIO is ready
     // const struct device *gpio_dev = DEVICE_DT_GET(DT_NODELABEL(gpio0));

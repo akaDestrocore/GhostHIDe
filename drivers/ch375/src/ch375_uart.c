@@ -11,7 +11,7 @@
  * @date           2025
  * 
  * @details
- * Manual UART configuration using STM32 LL drivers for 9-bit mode operation.
+ * Manual UART configuration using MCU's SDK drivers for 9-bit mode operation.
  * Bypasses Zephyr's UART API to enable command/data differentiation via
  * 9th bit. Implements clock setup, GPIO configuration, and baudrate management.
  * 
@@ -33,7 +33,7 @@ LOG_MODULE_REGISTER(ch375_uart, LOG_LEVEL_DBG);
                                    uint32_t initial_baudrate, 
                                    struct ch375_Context_t **ppCtxOut);
     extern int ch375_stm32_set_baudrate(struct ch375_Context_t *pCtx, uint32_t baudrate);
-#elif defined(CONFIG_SOC_RP2350A_M33) || defined(CONFIG_SOC_SERIES_RP2XXX)
+#elif defined(CONFIG_SOC_RP2350A_M33) || defined(CONFIG_SOC_RP2040) || defined(CONFIG_SOC_SERIES_RP2XXX)
     extern int ch375_rp2_hw_init(const char *name, int uart_index, 
                                 const struct gpio_dt_spec *int_gpio, 
                                 uint32_t initial_baudrate, 
@@ -52,7 +52,10 @@ int ch375_hwInitManual(const char *name, int usart_index, const struct gpio_dt_s
     LOG_INF("Platform: STM32F4X");
     return ch375_stm32_hw_init(name, usart_index, int_gpio, initial_baudrate, ppCtxOut);
 #elif defined(CONFIG_SOC_RP2350A_M33)
-    LOG_INF("Platform: RP2350A_M33");
+        LOG_INF("Platform: RP2350 (RPI Pico 2)");
+    return ch375_rp2_hw_init(name, usart_index, int_gpio, initial_baudrate, ppCtxOut);
+#elif defined(CONFIG_SOC_RP2040)
+    LOG_INF("Platform: RP2040 (RPI Pico)");
     return ch375_rp2_hw_init(name, usart_index, int_gpio, initial_baudrate, ppCtxOut);
 #else
     LOG_ERR("ERROR: No platform defined!");
@@ -69,7 +72,7 @@ int ch375_hwSetBaudrate(struct ch375_Context_t *pCtx, uint32_t baudrate)
     
 #if defined(CONFIG_SOC_SERIES_STM32F4X)
     return ch375_stm32_set_baudrate(pCtx, baudrate);
-#elif defined(CONFIG_SOC_RP2350A_M33)
+#elif defined(CONFIG_SOC_RP2350A_M33) || defined(CONFIG_SOC_RP2040) || defined(CONFIG_SOC_SERIES_RP2XXX)
     return ch375_rp2_set_baudrate(pCtx, baudrate);
 #else
     LOG_ERR("ERROR: No platform defined!");
