@@ -1,0 +1,4 @@
+/*
+ * RP2040 and RP2350 share the same peripheral configuration.
+ */
+#include "rpi_pico2.overlay"
